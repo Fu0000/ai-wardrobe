@@ -1,0 +1,1 @@
+"""User asset bounded context."""

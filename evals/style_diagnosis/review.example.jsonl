@@ -1,0 +1,1 @@
+{"sample_id":"sd_example_commute_001","dataset_version":"v0.1","evaluator_version":"human-rubric-v1.0.0","reviewer_id":"reviewer_example_a","scores":{"primary_issue_hit":5,"strength_specificity":4,"actionability":4,"occasion_fit":5,"minimal_change":5,"respectful_expression":5},"hard_failure_codes":[],"notes":"Example only. Reviewer IDs must be pseudonymous."}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-wardrobe.local/evals/style-diagnosis-dataset.schema.json",
+  "title": "AI Wardrobe Style Diagnosis Evaluation Sample",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sample_id",
+    "dataset_version",
+    "split",
+    "asset_reference",
+    "occasion",
+    "consent_reference",
+    "expected"
+  ],
+  "properties": {
+    "sample_id": {
+      "type": "string",
+      "pattern": "^sd_[a-z0-9_]+$"
+    },
+    "dataset_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+$"
+    },
+    "split": {
+      "enum": [
+        "tune",
+        "validation",
+        "regression"
+      ]
+    },
+    "asset_reference": {
+      "type": "string",
+      "description": "Opaque private asset reference, never a permanent public URL."
+    },
+    "occasion": {
+      "enum": [
+        "DAILY",
+        "SCHOOL",
+        "WORK",
+        "INTERVIEW",
+        "DATE",
+        "SOCIAL",
+        "TRAVEL",
+        "OTHER"
+      ]
+    },
+    "consent_reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_acceptable",
+        "primary_issue_categories",
+        "must_preserve"
+      ],
+      "properties": {
+        "input_acceptable": {
+          "type": "boolean"
+        },
+        "primary_issue_categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "must_preserve": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

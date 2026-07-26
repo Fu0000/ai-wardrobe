@@ -1,0 +1,95 @@
+groups:
+  - name: ai-wardrobe-service
+    rules:
+      - alert: AIWardrobeHigh5xxRate
+        expr: |
+          (
+            sum(rate(aiw_http_server_requests_total{http_response_status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(aiw_http_server_requests_total[5m])), 0.001)
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: API 5xx rate exceeds 2%
+          runbook: Check Trace ID samples, readiness dependencies, and the latest deployment.
+
+      - alert: AIWardrobeApiP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(aiw_http_server_duration_milliseconds_bucket[10m]))
+          ) > 1000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: API P95 latency exceeds 1 second
+          runbook: Split by http_route and inspect database, Redis, and provider child spans.
+
+      - alert: AIWardrobeWorkerFailureSpike
+        expr: |
+          sum(
+            rate(
+              aiw_worker_executions_total{
+                aiw_outcome=~"error|failed_final|timed_out"
+              }[10m]
+            )
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Background worker failures are increasing
+          runbook: Split by messaging_operation_name and inspect the linked job trace.
+
+      - alert: AIWardrobeAIProviderFailureRateHigh
+        expr: |
+          (
+            sum(rate(aiw_ai_provider_attempts_total{aiw_outcome!="success"}[10m]))
+            /
+            clamp_min(sum(rate(aiw_ai_provider_attempts_total[10m])), 0.001)
+          ) > 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI provider failure rate exceeds 10%
+          runbook: Split by provider, model, operation, and outcome before changing fallback policy.
+
+      - alert: AIWardrobeOutboxPublishFailures
+        expr: |
+          sum(rate(aiw_outbox_publishes_total{aiw_outcome="failed"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Transactional Outbox events are failing to publish
+          runbook: Check Redis/Celery connectivity and Outbox locked or failed rows.
+
+      - alert: AIWardrobeOutboxBacklogOld
+        expr: aiw_outbox_oldest_pending_age_seconds > 120
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Oldest pending Outbox event exceeds 2 minutes
+          runbook: Check dispatcher liveness, Redis connectivity, and Celery queue consumers.
+
+      - alert: AIWardrobeDeletionFailures
+        expr: |
+          sum(
+            rate(
+              aiw_worker_executions_total{
+                messaging_operation_name="celery run_deletion",
+                aiw_outcome=~"error|failed_final|timed_out"
+              }[15m]
+            )
+          ) > 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: Privacy deletion jobs are failing
+          runbook: Check COS deletion errors first, then DB transaction and fenced execution state.

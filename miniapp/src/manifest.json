@@ -1,0 +1,17 @@
+{
+  "name": "AI Wardrobe",
+  "appid": "__UNI__AIWARDROBE",
+  "description": "你的个人 AI 穿搭顾问",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true
+  }
+}

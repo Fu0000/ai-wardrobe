@@ -1,0 +1,163 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+concurrency:
+  group: ai-wardrobe-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  IMAGE: ghcr.io/${{ github.repository_owner }}/ai-wardrobe-api:${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+    name: Build, migrate, and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.35.0
+
+      - name: Configure cluster access
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Validate staging prerequisites
+        env:
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          TRUSTED_PROXY_CIDRS_JSON: ${{ vars.STAGING_TRUSTED_PROXY_CIDRS_JSON }}
+        run: |
+          kubectl apply -f infra/k8s/base/namespace.yaml
+          kubectl apply -f infra/k8s/base/configmap.yaml
+          kubectl -n ai-wardrobe get secret ai-wardrobe-secrets
+          test -n "$GHCR_PULL_USERNAME"
+          test -n "$GHCR_PULL_TOKEN"
+          test -n "$TRUSTED_PROXY_CIDRS_JSON"
+          python - <<'PY'
+          import ipaddress
+          import json
+          import os
+
+          cidrs = json.loads(os.environ["TRUSTED_PROXY_CIDRS_JSON"])
+          if not isinstance(cidrs, list) or not cidrs:
+              raise SystemExit("STAGING_TRUSTED_PROXY_CIDRS_JSON must be a non-empty JSON list")
+          for cidr in cidrs:
+              if not isinstance(cidr, str):
+                  raise SystemExit("every trusted proxy CIDR must be a string")
+              network = ipaddress.ip_network(cidr, strict=False)
+              if network.prefixlen == 0:
+                  raise SystemExit("trusted proxy CIDRs must not trust the entire address space")
+          PY
+          kubectl -n ai-wardrobe patch configmap ai-wardrobe-config \
+            --type merge \
+            --patch "$(jq -cn \
+              --arg cidrs "$TRUSTED_PROXY_CIDRS_JSON" \
+              '{data:{AIW_TRUSTED_PROXY_CIDRS:$cidrs}}')"
+          kubectl -n ai-wardrobe create secret docker-registry ai-wardrobe-registry \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_PULL_USERNAME" \
+            --docker-password="$GHCR_PULL_TOKEN" \
+            --dry-run=client \
+            --output=yaml \
+            | kubectl apply -f -
+
+      - name: Run forward-only migrations
+        env:
+          AIW_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          AIW_IMAGE: ${{ env.IMAGE }}
+        run: |
+          sed \
+            -e "s|\${AIW_DEPLOYMENT_ID}|${AIW_DEPLOYMENT_ID}|g" \
+            -e "s|\${AIW_IMAGE}|${AIW_IMAGE}|g" \
+            infra/k8s/migration-job.yaml \
+            | kubectl apply -f -
+          migration_job="ai-wardrobe-migrate-${AIW_DEPLOYMENT_ID}"
+          if ! kubectl -n ai-wardrobe wait \
+            --for=condition=complete \
+            "job/${migration_job}" \
+            --timeout=10m; then
+            kubectl -n ai-wardrobe logs "job/${migration_job}" --all-containers
+            exit 1
+          fi
+
+      - name: Deploy immutable image
+        run: |
+          kubectl kustomize infra/k8s/base \
+            | sed "s|AIW_IMAGE_PLACEHOLDER|${IMAGE}|g" \
+            | kubectl apply -f -
+
+      - name: Wait for safe rollout
+        run: |
+          for deployment in \
+            ai-wardrobe-api \
+            ai-wardrobe-worker-fast \
+            ai-wardrobe-worker-image \
+            ai-wardrobe-worker-media \
+            ai-wardrobe-worker-maintenance \
+            ai-wardrobe-beat; do
+            kubectl -n ai-wardrobe rollout status \
+              "deployment/${deployment}" \
+              --timeout=10m
+          done
+
+      - name: Readiness smoke test
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          test -n "$STAGING_API_BASE_URL"
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            "${STAGING_API_BASE_URL%/}/health/ready"

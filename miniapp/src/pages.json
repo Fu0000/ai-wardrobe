@@ -1,0 +1,106 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "今日"
+      }
+    },
+    {
+      "path": "pages/tasks/index",
+      "style": {
+        "navigationBarTitleText": "任务中心",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/diagnosis/index",
+      "style": {
+        "navigationBarTitleText": "穿搭诊断",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/diagnosis/result",
+      "style": {
+        "navigationBarTitleText": "诊断结果",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/optimization/index",
+      "style": {
+        "navigationBarTitleText": "最小改变优化",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/optimization/result",
+      "style": {
+        "navigationBarTitleText": "Before / After",
+        "navigationBarBackgroundColor": "#171816",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/share/confirm",
+      "style": {
+        "navigationBarTitleText": "分享确认",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/share/index",
+      "style": {
+        "navigationBarTitleText": "Before / After 投票",
+        "navigationBarBackgroundColor": "#171816",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人设置",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/profile/deletion",
+      "style": {
+        "navigationBarTitleText": "删除账户数据",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/profile/photos",
+      "style": {
+        "navigationBarTitleText": "照片数据管理",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/profile/feedback",
+      "style": {
+        "navigationBarTitleText": "内测反馈",
+        "navigationBarBackgroundColor": "#F4F0E8",
+        "navigationBarTextStyle": "black"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "AI Wardrobe",
+    "navigationBarBackgroundColor": "#F4F0E8",
+    "backgroundColor": "#F4F0E8",
+    "backgroundTextStyle": "dark"
+  }
+}

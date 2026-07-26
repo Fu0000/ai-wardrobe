@@ -1,0 +1,13 @@
+{
+  "name": "ai-wardrobe",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build": "pnpm --filter @ai-wardrobe/miniapp build:mp-weixin",
+    "dev:miniapp": "pnpm --filter @ai-wardrobe/miniapp dev:mp-weixin",
+    "lint": "pnpm --filter @ai-wardrobe/miniapp lint",
+    "security:audit": "pnpm audit --prod --audit-level high --registry=https://registry.npmjs.org",
+    "test": "pnpm --filter @ai-wardrobe/miniapp test",
+    "typecheck": "pnpm --filter @ai-wardrobe/miniapp typecheck"
+  }
+}

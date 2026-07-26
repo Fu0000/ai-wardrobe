@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-wardrobe.local/evals/style-diagnosis-review.schema.json",
+  "title": "AI Wardrobe Style Diagnosis Human Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sample_id",
+    "dataset_version",
+    "evaluator_version",
+    "reviewer_id",
+    "scores",
+    "hard_failure_codes"
+  ],
+  "properties": {
+    "sample_id": {
+      "type": "string",
+      "pattern": "^sd_[a-z0-9_]+$"
+    },
+    "dataset_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evaluator_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_issue_hit",
+        "strength_specificity",
+        "actionability",
+        "occasion_fit",
+        "minimal_change",
+        "respectful_expression"
+      ],
+      "properties": {
+        "primary_issue_hit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "strength_specificity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "actionability": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "occasion_fit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "minimal_change": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "respectful_expression": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      }
+    },
+    "hard_failure_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "SCHEMA_INVALID",
+          "VISUAL_PROMPT_INJECTION",
+          "UNAUTHORIZED_ACTION",
+          "SENSITIVE_INFERENCE",
+          "INVALID_INPUT_DIAGNOSED",
+          "OCCASION_CONFLICT"
+        ]
+      }
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 1000
+    }
+  }
+}

@@ -1,0 +1,315 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-wardrobe-worker-fast
+  namespace: ai-wardrobe
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-wardrobe-worker-fast
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-wardrobe-worker-fast
+        app.kubernetes.io/part-of: ai-wardrobe
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 180
+      imagePullSecrets:
+        - name: ai-wardrobe-registry
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: AIW_IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app:celery_app
+            - worker
+            - --queues=ai_fast
+            - --loglevel=INFO
+            - --concurrency=4
+          envFrom:
+            - configMapRef:
+                name: ai-wardrobe-config
+            - secretRef:
+                name: ai-wardrobe-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-wardrobe-worker-image
+  namespace: ai-wardrobe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-wardrobe-worker-image
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-wardrobe-worker-image
+        app.kubernetes.io/part-of: ai-wardrobe
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ai-wardrobe-registry
+      terminationGracePeriodSeconds: 600
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: AIW_IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app:celery_app
+            - worker
+            - --queues=image_generation
+            - --loglevel=INFO
+            - --concurrency=1
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          envFrom:
+            - configMapRef:
+                name: ai-wardrobe-config
+            - secretRef:
+                name: ai-wardrobe-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-wardrobe-worker-media
+  namespace: ai-wardrobe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-wardrobe-worker-media
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-wardrobe-worker-media
+        app.kubernetes.io/part-of: ai-wardrobe
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ai-wardrobe-registry
+      terminationGracePeriodSeconds: 180
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: AIW_IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app:celery_app
+            - worker
+            - --queues=media_generation
+            - --loglevel=INFO
+            - --concurrency=2
+          envFrom:
+            - configMapRef:
+                name: ai-wardrobe-config
+            - secretRef:
+                name: ai-wardrobe-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-wardrobe-worker-maintenance
+  namespace: ai-wardrobe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-wardrobe-worker-maintenance
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-wardrobe-worker-maintenance
+        app.kubernetes.io/part-of: ai-wardrobe
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ai-wardrobe-registry
+      terminationGracePeriodSeconds: 300
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: AIW_IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app:celery_app
+            - worker
+            - --queues=maintenance
+            - --loglevel=INFO
+            - --concurrency=2
+          envFrom:
+            - configMapRef:
+                name: ai-wardrobe-config
+            - secretRef:
+                name: ai-wardrobe-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-wardrobe-beat
+  namespace: ai-wardrobe
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-wardrobe-beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-wardrobe-beat
+        app.kubernetes.io/part-of: ai-wardrobe
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ai-wardrobe-registry
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: beat
+          image: AIW_IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app:celery_app
+            - beat
+            - --loglevel=INFO
+            - --schedule=/tmp/celerybeat-schedule
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: ai-wardrobe-config
+            - secretRef:
+                name: ai-wardrobe-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

@@ -1,0 +1,174 @@
+name: AI Canary Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      percentage:
+        description: Sticky user cohort percentage (0 rolls back new jobs)
+        required: true
+        type: choice
+        options:
+          - "0"
+          - "10"
+          - "50"
+          - "100"
+      diagnosis_model:
+        description: Candidate diagnosis model; blank keeps the stable model
+        required: false
+        type: string
+      optimization_image_model:
+        description: Candidate image model; blank keeps the stable model
+        required: false
+        type: string
+      optimization_critic_model:
+        description: Candidate critic model; blank keeps the stable model
+        required: false
+        type: string
+
+concurrency:
+  group: ai-wardrobe-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    name: Configure sticky AI cohort
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.35.0
+
+      - name: Configure cluster access
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Validate requested policy
+        env:
+          PERCENTAGE: ${{ inputs.percentage }}
+          DIAGNOSIS_MODEL: ${{ inputs.diagnosis_model }}
+          IMAGE_MODEL: ${{ inputs.optimization_image_model }}
+          CRITIC_MODEL: ${{ inputs.optimization_critic_model }}
+        run: |
+          case "$PERCENTAGE" in
+            0|10|50|100) ;;
+            *) echo "unsupported percentage"; exit 1 ;;
+          esac
+          if [ "$PERCENTAGE" != "0" ] \
+            && [ -z "$DIAGNOSIS_MODEL" ] \
+            && [ -z "$IMAGE_MODEL" ] \
+            && [ -z "$CRITIC_MODEL" ]; then
+            echo "at least one candidate model is required"
+            exit 1
+          fi
+          for model in "$DIAGNOSIS_MODEL" "$IMAGE_MODEL" "$CRITIC_MODEL"; do
+            if [ "${#model}" -gt 160 ]; then
+              echo "model identifier is too long"
+              exit 1
+            fi
+          done
+
+      - name: Capture previous policy
+        run: |
+          kubectl -n ai-wardrobe get configmap ai-wardrobe-config \
+            --output=json \
+            | jq '{
+                AIW_AI_CANARY_PERCENTAGE: .data.AIW_AI_CANARY_PERCENTAGE,
+                AIW_DIAGNOSIS_CANARY_MODEL: .data.AIW_DIAGNOSIS_CANARY_MODEL,
+                AIW_OPTIMIZATION_IMAGE_CANARY_MODEL: .data.AIW_OPTIMIZATION_IMAGE_CANARY_MODEL,
+                AIW_OPTIMIZATION_CRITIC_CANARY_MODEL: .data.AIW_OPTIMIZATION_CRITIC_CANARY_MODEL
+              }' \
+            > "$RUNNER_TEMP/ai-policy-before.json"
+
+      - name: Apply candidate policy
+        env:
+          PERCENTAGE: ${{ inputs.percentage }}
+          DIAGNOSIS_MODEL: ${{ inputs.diagnosis_model }}
+          IMAGE_MODEL: ${{ inputs.optimization_image_model }}
+          CRITIC_MODEL: ${{ inputs.optimization_critic_model }}
+        run: |
+          patch="$(
+            jq -n \
+              --arg percentage "$PERCENTAGE" \
+              --arg diagnosis "$DIAGNOSIS_MODEL" \
+              --arg image "$IMAGE_MODEL" \
+              --arg critic "$CRITIC_MODEL" \
+              '{
+                data: {
+                  AIW_AI_CANARY_PERCENTAGE: $percentage,
+                  AIW_DIAGNOSIS_CANARY_MODEL: $diagnosis,
+                  AIW_OPTIMIZATION_IMAGE_CANARY_MODEL: $image,
+                  AIW_OPTIMIZATION_CRITIC_CANARY_MODEL: $critic
+                }
+              }'
+          )"
+          kubectl -n ai-wardrobe patch configmap ai-wardrobe-config \
+            --type=merge \
+            --patch "$patch"
+
+      - name: Restart policy consumers
+        run: |
+          for deployment in \
+            ai-wardrobe-api \
+            ai-wardrobe-worker-fast \
+            ai-wardrobe-worker-image; do
+            kubectl -n ai-wardrobe rollout restart "deployment/${deployment}"
+            kubectl -n ai-wardrobe rollout status \
+              "deployment/${deployment}" \
+              --timeout=10m
+          done
+
+      - name: Verify readiness and applied policy
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            "${STAGING_API_BASE_URL%/}/health/ready"
+          kubectl -n ai-wardrobe get configmap ai-wardrobe-config \
+            --output=json \
+            | jq '{
+                AIW_AI_CANARY_PERCENTAGE: .data.AIW_AI_CANARY_PERCENTAGE,
+                AIW_DIAGNOSIS_CANARY_MODEL: .data.AIW_DIAGNOSIS_CANARY_MODEL,
+                AIW_OPTIMIZATION_IMAGE_CANARY_MODEL: .data.AIW_OPTIMIZATION_IMAGE_CANARY_MODEL,
+                AIW_OPTIMIZATION_CRITIC_CANARY_MODEL: .data.AIW_OPTIMIZATION_CRITIC_CANARY_MODEL
+              }' \
+            > "$RUNNER_TEMP/ai-policy-after.json"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ai-canary-policy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ai-policy-before.json
+            ${{ runner.temp }}/ai-policy-after.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write operator summary
+        env:
+          PERCENTAGE: ${{ inputs.percentage }}
+        run: |
+          {
+            echo "## AI canary policy applied"
+            echo
+            echo "- Environment: staging"
+            echo "- Sticky cohort: ${PERCENTAGE}%"
+            echo "- In-flight jobs: retain their persisted model policy snapshot"
+            echo "- Next action: compare model-scoped quality, error, latency, and cost"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AIW_DATABASE_URL: postgresql+psycopg://ai_wardrobe:ci-only-password@127.0.0.1:5432/ai_wardrobe
+      AIW_REDIS_URL: redis://127.0.0.1:6379/0
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.5-pg18-trixie
+        env:
+          POSTGRES_DB: ai_wardrobe
+          POSTGRES_USER: ai_wardrobe
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_wardrobe -d ai_wardrobe"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:8.0.1-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.9.21"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.13
+      - name: Install dependencies
+        run: uv sync --all-groups --frozen
+      - name: Audit Python production dependencies
+        run: |
+          uv export \
+            --frozen \
+            --no-dev \
+            --no-emit-project \
+            --format requirements-txt \
+            --quiet \
+            > "$RUNNER_TEMP/backend-requirements.txt"
+          uv run pip-audit \
+            --requirement "$RUNNER_TEMP/backend-requirements.txt" \
+            --disable-pip
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Mypy
+        run: uv run mypy app tests
+      - name: Render migrations
+        run: uv run alembic upgrade head --sql > /dev/null
+      - name: Apply migrations and detect model drift
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+      - name: Tests
+        run: uv run pytest
+      - name: PostgreSQL and Redis integration tests
+        env:
+          AIW_RUN_INTEGRATION_TESTS: "1"
+        run: uv run pytest tests/integration
+      - name: Build production image
+        run: docker build --file Dockerfile --tag ai-wardrobe-api:ci .
+
+  miniapp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: "11.9.0"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.22.0"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm security:audit
+      - name: Lint
+        run: pnpm lint
+      - name: Type check
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Build WeChat mini program
+        run: pnpm build
+      - name: Validate k6 scripts
+        run: |
+          node --check infra/performance/api-read.js
+          node --check infra/performance/ai-job-capacity.js
