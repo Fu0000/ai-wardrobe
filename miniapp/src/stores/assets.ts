@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 
 import {
+  isUploadRunStale,
   recoverUploadPhase,
   type UploadPhase,
   uploadProgressForPhase,
@@ -10,6 +11,7 @@ import {
   completeUpload,
   createUploadTicket,
   removeSavedImage,
+  requestPhotoDeletion,
   type SelectedImage,
   uploadImageToTicket,
 } from "@/services/assets";
@@ -17,6 +19,14 @@ import { useAuthStore } from "@/stores/auth";
 
 const STORAGE_KEY = "aiw:source-draft:v1";
 let abortCurrentUpload: (() => void) | null = null;
+// 每次取消或重新发起都会推进代次，旧的上传流程据此判断自己已失效。
+let uploadGeneration = 0;
+
+function newIdempotencyKey(): string {
+  return `cancelled-upload-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 14)}`;
+}
 
 interface PersistedDraft {
   image: SelectedImage;
@@ -91,8 +101,23 @@ export const useAssetStore = defineStore("assets", {
         return;
       }
 
+      const generation = ++uploadGeneration;
+      // 立即离开 cancelled，否则本轮自身会被判定为已失效——用户取消后就再也
+      // 无法重试。代次守卫负责让上一轮失效，phase 只表达当前这一轮的进度。
+      this.errorMessage = null;
+      this.setPhase("selected");
+      const isStale = () =>
+        isUploadRunStale({
+          generation,
+          currentGeneration: uploadGeneration,
+          phase: this.phase,
+        });
+
       const auth = useAuthStore();
       await auth.authenticate();
+      if (isStale()) {
+        return;
+      }
       if (!auth.accessToken) {
         this.errorMessage = "登录失败，请检查网络后重试。";
         this.setPhase("failed");
@@ -103,6 +128,12 @@ export const useAssetStore = defineStore("assets", {
         this.errorMessage = null;
         this.setPhase("authorizing");
         const ticket = await createUploadTicket(this.image, auth.accessToken);
+        // Ticket 请求无法中断，返回后必须确认这次上传仍然有效，
+        // 否则会把已取消的流程推进到 uploading。
+        if (isStale()) {
+          await this.discardCancelledAsset(ticket.asset_id, auth.accessToken);
+          return;
+        }
         this.assetId = ticket.asset_id;
         this.setPhase("uploading");
 
@@ -110,6 +141,10 @@ export const useAssetStore = defineStore("assets", {
         abortCurrentUpload = directUpload.abort;
         await directUpload.promise;
         abortCurrentUpload = null;
+        if (isStale()) {
+          await this.discardCancelledAsset(ticket.asset_id, auth.accessToken);
+          return;
+        }
 
         this.setPhase("completing");
         const asset = await completeUpload(
@@ -117,24 +152,45 @@ export const useAssetStore = defineStore("assets", {
           this.image.contentType,
           auth.accessToken,
         );
+        // Complete 同样不可中断。用户在此期间取消后请求仍会成功返回，
+        // 若无此判断就会把撤回的上传复活为 ready 并进入诊断流程。
+        if (isStale()) {
+          await this.discardCancelledAsset(asset.id, auth.accessToken);
+          return;
+        }
         this.assetId = asset.id;
         this.setPhase("ready");
       } catch (error) {
         abortCurrentUpload = null;
-        if (this.phase === "cancelled") {
+        if (isStale()) {
           return;
         }
         this.errorMessage = errorMessage(error);
         this.setPhase("failed");
       }
     },
+    /**
+     * 清理用户取消后仍被服务端创建出来的资产。
+     *
+     * 失败只记录不上抛：此时用户已经看到「已暂停上传」，再抛错只会制造
+     * 与其认知不符的报错。残留资产由服务端的孤儿清理兜底。
+     */
+    async discardCancelledAsset(assetId: string, accessToken: string) {
+      try {
+        await requestPhotoDeletion(assetId, newIdempotencyKey(), accessToken);
+      } catch {
+        // 静默失败，理由见上。
+      }
+    },
     cancelUpload() {
+      uploadGeneration += 1;
       abortCurrentUpload?.();
       abortCurrentUpload = null;
       this.errorMessage = "已暂停上传，可以稍后重试。";
       this.setPhase("cancelled");
     },
     async clearDraft() {
+      uploadGeneration += 1;
       abortCurrentUpload?.();
       abortCurrentUpload = null;
       if (this.image?.localPath) {
