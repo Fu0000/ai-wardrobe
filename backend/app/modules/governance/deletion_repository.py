@@ -7,14 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.assets.models import AssetStatus, SourcePhoto, UserAsset
 from app.modules.diagnosis.models import StyleDiagnosis, StyleOptimizationResult
 from app.modules.events.models import OutboxEvent
+from app.modules.feedback.models import BetaFeedback
 from app.modules.governance.models import (
     DeletionJob,
     DeletionType,
+    QuotaReservation,
     UsageCounter,
 )
 from app.modules.growth.models import ShareRecord, UserEvent, VoteRecord
 from app.modules.identity.models import User, UserIdentity, UserProfile, UserStatus
-from app.modules.jobs.models import GenerationJob
+from app.modules.jobs.models import AIInvocation, GenerationJob
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,10 +311,17 @@ class DeletionRepository:
         )
         await self._session.execute(delete(StyleDiagnosis).where(StyleDiagnosis.user_id == user_id))
         await self._session.execute(delete(SourcePhoto).where(SourcePhoto.user_id == user_id))
+        await self._session.execute(delete(BetaFeedback).where(BetaFeedback.user_id == user_id))
         await self._session.execute(delete(UserProfile).where(UserProfile.user_id == user_id))
         await self._session.execute(delete(UserAsset).where(UserAsset.user_id == user_id))
         await self._session.execute(delete(UserIdentity).where(UserIdentity.user_id == user_id))
         await self._session.execute(delete(UsageCounter).where(UsageCounter.user_id == user_id))
+        # ai_invocations 与 quota_reservations 虽有 generation_jobs 级联，但本次注销
+        # 任务对应的 Job 需存活至执行结束，其关联行不会被级联带走，因此显式按用户清理。
+        await self._session.execute(delete(AIInvocation).where(AIInvocation.user_id == user_id))
+        await self._session.execute(
+            delete(QuotaReservation).where(QuotaReservation.user_id == user_id)
+        )
         await self._session.execute(
             delete(DeletionJob).where(
                 DeletionJob.user_id == user_id,
