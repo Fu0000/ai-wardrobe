@@ -29,6 +29,7 @@ celery_app.conf.update(
     task_default_queue="ai_fast",
     task_routes={
         "ai_wardrobe.dispatch_outbox": {"queue": "maintenance"},
+        "ai_wardrobe.reap_stale_jobs": {"queue": "maintenance"},
         "ai_wardrobe.run_style_diagnosis": {"queue": "ai_fast"},
         "ai_wardrobe.run_style_optimization": {"queue": "image_generation"},
         "ai_wardrobe.run_share_asset": {"queue": "media_generation"},
@@ -38,7 +39,11 @@ celery_app.conf.update(
         "dispatch-outbox": {
             "task": "ai_wardrobe.dispatch_outbox",
             "schedule": settings.outbox_dispatch_interval_seconds,
-        }
+        },
+        "reap-stale-jobs": {
+            "task": "ai_wardrobe.reap_stale_jobs",
+            "schedule": settings.stale_job_reap_interval_seconds,
+        },
     },
 )
 # This is non-sensitive, pod-local recovery metadata stored on the dedicated

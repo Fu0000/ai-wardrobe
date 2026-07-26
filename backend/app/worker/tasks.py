@@ -12,11 +12,37 @@ from app.modules.governance.deletion_executor import (
     RetryableDeletionError,
 )
 from app.modules.growth.executor import RetryableShareError, ShareAssetExecutor
+from app.modules.jobs.reaper import StaleJobReaper
 from app.modules.optimization.executor import (
     OptimizationExecutor,
     RetryableOptimizationError,
 )
 from app.worker.celery_app import celery_app
+
+
+@celery_app.task(name="ai_wardrobe.reap_stale_jobs")  # type: ignore[untyped-decorator]
+def reap_stale_jobs() -> int:
+    """回收 Worker 失联后卡死的任务，释放其占用的配额。"""
+
+    async def reap() -> int:
+        with WorkerSpan(
+            name="celery reap_stale_jobs",
+            headers={},
+            job_id=None,
+        ) as operation:
+            settings = get_settings()
+            database = Database(settings)
+            try:
+                outcome = await StaleJobReaper(
+                    settings=settings,
+                    database=database,
+                ).reap_once()
+                operation.set_outcome("reaped")
+                return outcome.reaped
+            finally:
+                await database.dispose()
+
+    return asyncio.run(reap())
 
 
 @celery_app.task(name="ai_wardrobe.dispatch_outbox")  # type: ignore[untyped-decorator]

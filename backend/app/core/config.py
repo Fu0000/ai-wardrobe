@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     outbox_batch_size: int = 50
     outbox_lock_timeout_seconds: int = 300
     outbox_dispatch_interval_seconds: float = 5.0
+    # 过期任务回收：租约到期后再宽限一段时间才判定失联，避免与正常的租约续期竞争。
+    # 默认值需严格长于最长的执行租约（优化任务 300 秒），留出一倍余量。
+    stale_job_grace_seconds: int = 600
+    stale_job_batch_size: int = 50
+    stale_job_reap_interval_seconds: float = 60.0
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> "Settings":
@@ -146,6 +151,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 "optimization execution lease must cover generation and critic attempts"
             )
+        # 宽限期必须长于最长的执行租约，否则回收器会误杀仍在正常执行的任务。
+        longest_lease = max(
+            self.diagnosis_execution_lease_seconds,
+            self.optimization_execution_lease_seconds,
+            self.share_execution_lease_seconds,
+            self.deletion_execution_lease_seconds,
+        )
+        if self.stale_job_grace_seconds < longest_lease:
+            raise ValueError("stale job grace period must exceed the longest execution lease")
+        if self.stale_job_batch_size <= 0:
+            raise ValueError("stale job batch size must be positive")
+        if self.stale_job_reap_interval_seconds <= 0:
+            raise ValueError("stale job reap interval must be positive")
         if self.share_execution_lease_seconds < 30:
             raise ValueError("share execution lease must be at least 30 seconds")
         if not 1 <= self.share_ttl_days <= 90:
