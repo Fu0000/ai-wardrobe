@@ -76,7 +76,7 @@ async def test_redis_token_bucket_is_atomic_under_concurrency() -> None:
     settings = Settings()
     redis_client = Redis.from_url(
         settings.redis_url,
-        encoding=None,
+        encoding="utf-8",
         decode_responses=False,
     )
     limiter = RedisTokenBucketRateLimiter(redis_client)

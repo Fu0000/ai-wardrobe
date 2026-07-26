@@ -214,7 +214,10 @@ def build_rate_limit_guard(settings: Settings) -> RateLimitGuard:
         return RateLimitGuard(limiter=DisabledRateLimiter(), settings=settings)
     client = Redis.from_url(
         settings.redis_url,
-        encoding=None,
+        # 必须是合法编码名而非 None：redis-py 用它编码字符串参数，
+        # None 会让任何带 str 的命令抛 TypeError。decode_responses=False
+        # 已保证返回值仍是 bytes，令牌桶脚本据此解析。
+        encoding="utf-8",
         decode_responses=False,
         socket_connect_timeout=1.0,
         socket_timeout=1.0,

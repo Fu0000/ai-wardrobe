@@ -6,6 +6,7 @@ purge_account」，不依赖数据库；本文件在真实 PostgreSQL 上验证�
 """
 
 import os
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -216,7 +217,7 @@ async def _populate(
             UserIdentity(
                 id=uuid4(),
                 user_id=user.id,
-                provider=IdentityProvider.WECHAT_MINI_PROGRAM,
+                provider=IdentityProvider.WECHAT,
                 provider_subject_hash=uuid4().hex,
                 provider_subject_encrypted="ciphertext",
             )
@@ -325,6 +326,7 @@ async def _populate(
             model="gpt-5.6-terra",
             prompt_version="v1",
             schema_version="v1",
+            started_at=datetime.now(UTC),
         )
     )
     session.add(
@@ -335,6 +337,7 @@ async def _populate(
             quota_type=QuotaType.DIAGNOSIS,
             status=QuotaReservationStatus.RESERVED,
             amount=1,
+            period_keys=["2026-07"],
         )
     )
 

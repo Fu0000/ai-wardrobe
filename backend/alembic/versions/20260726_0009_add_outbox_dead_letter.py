@@ -16,7 +16,11 @@ depends_on: str | Sequence[str] | None = None
 
 # 状态列使用 native_enum=False，取值由 CheckConstraint 约束，
 # 因此新增枚举值必须重建该约束。
+#
+# create 用裸名，让命名约定补出 ck_%(table_name)s_ 前缀；drop 用 op.f() 包裹
+# 完整名以抑制约定，否则前缀会被加两次（参见 0005 修正）。
 _CONSTRAINT_NAME = "outbox_status"
+_FULL_CONSTRAINT_NAME = "ck_outbox_events_outbox_status"
 _OLD_VALUES = ("PENDING", "PROCESSING", "PUBLISHED", "FAILED")
 _NEW_VALUES = (*_OLD_VALUES, "DEAD_LETTER")
 
@@ -27,7 +31,7 @@ def _values_clause(values: tuple[str, ...]) -> str:
 
 
 def upgrade() -> None:
-    op.drop_constraint(_CONSTRAINT_NAME, "outbox_events", type_="check")
+    op.drop_constraint(op.f(_FULL_CONSTRAINT_NAME), "outbox_events", type_="check")
     op.create_check_constraint(
         _CONSTRAINT_NAME,
         "outbox_events",
@@ -42,7 +46,7 @@ def downgrade() -> None:
         "UPDATE outbox_events SET status = 'FAILED', next_retry_at = NULL "
         "WHERE status = 'DEAD_LETTER'"
     )
-    op.drop_constraint(_CONSTRAINT_NAME, "outbox_events", type_="check")
+    op.drop_constraint(op.f(_FULL_CONSTRAINT_NAME), "outbox_events", type_="check")
     op.create_check_constraint(
         _CONSTRAINT_NAME,
         "outbox_events",

@@ -106,7 +106,9 @@ def build_readiness_probe(
 ) -> ReadinessProbe:
     redis_client = Redis.from_url(
         settings.redis_url,
-        encoding=None,
+        # 同 rate_limit：encoding 必须是合法编码名，None 会让带字符串参数的
+        # 命令抛 TypeError。
+        encoding="utf-8",
         decode_responses=False,
         socket_connect_timeout=settings.readiness_timeout_seconds,
         socket_timeout=settings.readiness_timeout_seconds,

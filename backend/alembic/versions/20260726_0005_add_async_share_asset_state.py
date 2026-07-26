@@ -20,7 +20,10 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.drop_constraint(
-        "ck_share_records_share_status",
+        # 必须用 op.f() 包裹：命名约定会给 ck 自动加 ck_%(table_name)s_ 前缀，
+        # 直接传完整名会被再加一次，得到 ck_share_records_ck_share_records_...
+        # 而该约束并不存在。downgrade 侧本就用了 op.f()，此处是遗漏。
+        op.f("ck_share_records_share_status"),
         "share_records",
         type_="check",
     )

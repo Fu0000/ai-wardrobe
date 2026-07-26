@@ -21,7 +21,9 @@ dependencies = [
     "pydantic==2.13.4",
     "pydantic-settings==2.14.2",
     "redis==6.4.0",
-    "sqlalchemy==2.0.51",
+    # asyncio extra 带入 greenlet。SQLAlchemy 2.0 把它列为可选，
+    # 但异步驱动在运行时强依赖它，不声明会在首次查询才炸。
+    "sqlalchemy[asyncio]==2.0.51",
     "structlog==26.1.0",
     "uvicorn[standard]==0.51.0",
 ]
