@@ -8,6 +8,11 @@ import {
 } from "@/services/profile";
 import { useAssetStore } from "@/stores/assets";
 import { useAuthStore } from "@/stores/auth";
+import { useDiagnosisStore } from "@/stores/diagnoses";
+import { useJobStore } from "@/stores/jobs";
+import { useOptimizationStore } from "@/stores/optimizations";
+import { usePhotoDeletionStore } from "@/stores/photo-deletion";
+import { useShareStore } from "@/stores/shares";
 
 const STORAGE_KEY = "aiw:deletion:v1";
 const COMPLETED_KEY = "aiw:deletion-completed:v1";
@@ -158,6 +163,14 @@ export const useDeletionStore = defineStore("deletion", {
           uni.removeStorageSync(key);
         }
       }
+      // 清 storage 不清 Pinia。这些 store 在 onLaunch 时 hydrate 后常驻内存，
+      // 不重置的话注销当次会话内仍能读到诊断结论、优化前后图与分享记录。
+      useDiagnosisStore().$reset();
+      useOptimizationStore().$reset();
+      useShareStore().$reset();
+      usePhotoDeletionStore().$reset();
+      useJobStore().$reset();
+
       uni.setStorageSync(COMPLETED_KEY, {
         completedAt: Date.now(),
       });
