@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onLaunch } from "@dcloudio/uni-app";
 
+import { setReauthenticator } from "@/services/api";
 import { useAppStore } from "@/stores/app";
 import { useAssetStore } from "@/stores/assets";
 import { useAuthStore } from "@/stores/auth";
@@ -22,6 +23,9 @@ const photoDeletionStore = usePhotoDeletionStore();
 const shareStore = useShareStore();
 
 onLaunch(() => {
+  // 服务端拒绝凭据时由 api 层回调重新登录。这里注入而非在 api.ts 中直接
+  // import auth store，避免与 auth store 对 apiRequest 的依赖形成循环。
+  setReauthenticator(() => authStore.renewAfterRejection());
   appStore.hydrate();
   assetStore.hydrate();
   authStore.hydrate();

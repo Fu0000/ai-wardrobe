@@ -63,11 +63,12 @@ export const useAuthStore = defineStore("auth", {
       this.userId = persisted.userId;
       this.status = "authenticated";
     },
-    async authenticate() {
+    async authenticate(forceRenew = false) {
       if (!import.meta.env.VITE_API_BASE_URL) {
         return;
       }
       if (
+        !forceRenew &&
         this.status === "authenticated" &&
         this.expiresAt &&
         this.expiresAt > Date.now() + 30_000
@@ -91,6 +92,20 @@ export const useAuthStore = defineStore("auth", {
       } catch {
         this.status = "failed";
       }
+    },
+    /**
+     * 服务端拒绝当前凭据后重新登录，返回新 Token 供原请求重试。
+     *
+     * 必须先 clear()：本地 expiresAt 显示未过期，不清掉的话 authenticate
+     * 会直接复用这份已被服务端拒绝的凭据。
+     */
+    async renewAfterRejection(): Promise<string | null> {
+      if (this.status === "authenticating") {
+        return null;
+      }
+      this.clear();
+      await this.authenticate(true);
+      return this.accessToken;
     },
     clear() {
       this.status = "anonymous";
