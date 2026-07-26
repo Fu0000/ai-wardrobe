@@ -9,7 +9,7 @@ from celery import Celery
 from app.core.config import Settings
 from app.core.telemetry import record_outbox_backlog, record_outbox_publish
 from app.database.session import Database
-from app.modules.events.models import OutboxEvent
+from app.modules.events.models import OutboxEvent, OutboxStatus
 from app.modules.events.repository import OutboxRepository
 
 logger = structlog.get_logger(__name__)
@@ -118,6 +118,7 @@ class OutboxDispatcher:
         record_outbox_backlog(
             pending_count=backlog.pending_count,
             failed_count=backlog.failed_count,
+            dead_letter_count=backlog.dead_letter_count,
             oldest_pending_age_seconds=backlog.oldest_pending_age_seconds,
         )
         return len(events)
@@ -130,18 +131,29 @@ class OutboxDispatcher:
                 event_type=event.event_type,
                 outcome="failed",
             )
+            async with self._database.session_factory() as session:
+                status = await OutboxRepository(session).mark_failed(
+                    event_id,
+                    safe_error=type(error).__name__,
+                    max_attempts=self._settings.outbox_max_attempts,
+                )
+                await session.commit()
+            if status is OutboxStatus.DEAD_LETTER:
+                # 死信不会自愈，必须显式告警而不是淹没在重试日志里。
+                await logger.aerror(
+                    "outbox_event_dead_lettered",
+                    event_id=str(event_id),
+                    event_type=event.event_type,
+                    error_type=type(error).__name__,
+                    attempt_count=event.attempt_count + 1,
+                )
+                return
             await logger.aerror(
                 "outbox_publish_failed",
                 event_id=str(event_id),
                 event_type=event.event_type,
                 error_type=type(error).__name__,
             )
-            async with self._database.session_factory() as session:
-                await OutboxRepository(session).mark_failed(
-                    event_id,
-                    safe_error=type(error).__name__,
-                )
-                await session.commit()
             return
 
         record_outbox_publish(

@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     outbox_batch_size: int = 50
     outbox_lock_timeout_seconds: int = 300
     outbox_dispatch_interval_seconds: float = 5.0
+    # 重试上限。退避封顶 900 秒，16 次约覆盖 2.3 小时——足以扛过一次 Broker
+    # 停机与人工介入；超过后转入 DEAD_LETTER，不再无限重试。
+    outbox_max_attempts: int = 16
     # 过期任务回收：租约到期后再宽限一段时间才判定失联，避免与正常的租约续期竞争。
     # 默认值需严格长于最长的执行租约（优化任务 300 秒），留出一倍余量。
     stale_job_grace_seconds: int = 600
@@ -164,6 +167,8 @@ class Settings(BaseSettings):
             raise ValueError("stale job batch size must be positive")
         if self.stale_job_reap_interval_seconds <= 0:
             raise ValueError("stale job reap interval must be positive")
+        if self.outbox_max_attempts <= 0:
+            raise ValueError("outbox max attempts must be positive")
         if self.share_execution_lease_seconds < 30:
             raise ValueError("share execution lease must be at least 30 seconds")
         if not 1 <= self.share_ttl_days <= 90:

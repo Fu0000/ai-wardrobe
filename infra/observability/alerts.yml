@@ -77,6 +77,18 @@ groups:
           summary: Oldest pending Outbox event exceeds 2 minutes
           runbook: Check dispatcher liveness, Redis connectivity, and Celery queue consumers.
 
+      - alert: AIWardrobeOutboxDeadLetter
+        expr: aiw_outbox_dead_letter > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Transactional Outbox events exhausted retries and were dead-lettered
+          runbook: >-
+            Dead-lettered events are never retried and their business effect is lost.
+            Inspect last_error and event_type on DEAD_LETTER rows, fix the publisher
+            or payload, then requeue deliberately by resetting status to PENDING.
+
       - alert: AIWardrobeDeletionFailures
         expr: |
           sum(

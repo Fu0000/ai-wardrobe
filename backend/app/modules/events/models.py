@@ -15,6 +15,9 @@ class OutboxStatus(StrEnum):
     PROCESSING = "PROCESSING"
     PUBLISHED = "PUBLISHED"
     FAILED = "FAILED"
+    # 重试次数耗尽后的终态。不再排程，也不计入 failed_count，
+    # 避免一条永久性坏载荷让 Outbox 告警长期处于触发态。
+    DEAD_LETTER = "DEAD_LETTER"
 
 
 class OutboxEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -53,6 +53,7 @@ _ai_provider_duration = _meter.create_histogram("aiw.ai.provider.duration", unit
 _outbox_publishes = _meter.create_counter("aiw.outbox.publishes", unit="{event}")
 _outbox_pending = _meter.create_gauge("aiw.outbox.pending", unit="{event}")
 _outbox_failed = _meter.create_gauge("aiw.outbox.failed", unit="{event}")
+_outbox_dead_letter = _meter.create_gauge("aiw.outbox.dead_letter", unit="{event}")
 _outbox_oldest_pending_age = _meter.create_gauge(
     "aiw.outbox.oldest_pending_age",
     unit="s",
@@ -182,10 +183,12 @@ def record_outbox_backlog(
     *,
     pending_count: int,
     failed_count: int,
+    dead_letter_count: int,
     oldest_pending_age_seconds: float,
 ) -> None:
     _outbox_pending.set(pending_count)
     _outbox_failed.set(failed_count)
+    _outbox_dead_letter.set(dead_letter_count)
     _outbox_oldest_pending_age.set(oldest_pending_age_seconds)
 
 
