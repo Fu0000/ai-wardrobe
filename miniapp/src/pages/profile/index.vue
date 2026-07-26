@@ -2,6 +2,13 @@
 import { onLoad } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 
+import {
+  buildProfilePayload,
+  canEditProfile,
+  canSubmitProfile,
+  shouldOfferReload,
+  type ProfileLoadState,
+} from "@/lib/profile-form";
 import { getProfile, updateProfile } from "@/services/profile";
 import { useAuthStore } from "@/stores/auth";
 
@@ -9,10 +16,17 @@ const CONSENT_VERSION = "privacy-v1";
 const auth = useAuthStore();
 const displayName = ref("");
 const hasConsent = ref(false);
-const loading = ref(true);
+const loadState = ref<ProfileLoadState>("loading");
 const saving = ref(false);
 const errorMessage = ref<string | null>(null);
 
+const formSnapshot = computed(() => ({
+  loadState: loadState.value,
+  saving: saving.value,
+}));
+const canEdit = computed(() => canEditProfile(formSnapshot.value));
+const canSubmit = computed(() => canSubmitProfile(formSnapshot.value));
+const canRetryLoad = computed(() => shouldOfferReload(formSnapshot.value));
 const saveLabel = computed(() => (saving.value ? "正在保存" : "保存设置"));
 
 const updateConsent = (event: unknown) => {
@@ -30,39 +44,44 @@ const requireToken = async (): Promise<string | null> => {
 };
 
 const loadProfile = async () => {
-  loading.value = true;
+  loadState.value = "loading";
   errorMessage.value = null;
   const token = await requireToken();
   if (!token) {
-    loading.value = false;
+    loadState.value = "failed";
     return;
   }
   try {
     const profile = await getProfile(token);
     displayName.value = profile.display_name ?? "";
     hasConsent.value = profile.has_ai_processing_consent;
+    loadState.value = "ready";
   } catch (error) {
+    // 保持 loadState 为 failed：此时 hasConsent 仍是初值 false，
+    // 一旦允许保存就会把服务端真实的授权状态覆盖掉。
+    loadState.value = "failed";
     errorMessage.value =
       error instanceof Error ? error.message : "个人资料加载失败。";
-  } finally {
-    loading.value = false;
   }
 };
 
 const save = async () => {
+  if (!canSubmitProfile(formSnapshot.value)) {
+    return;
+  }
   const token = await requireToken();
-  if (!token || saving.value) {
+  if (!token) {
     return;
   }
   saving.value = true;
   errorMessage.value = null;
   try {
     await updateProfile(
-      {
-        display_name: displayName.value.trim() || null,
-        has_ai_processing_consent: hasConsent.value,
-        ...(hasConsent.value ? { consent_version: CONSENT_VERSION } : {}),
-      },
+      buildProfilePayload({
+        displayName: displayName.value,
+        hasConsent: hasConsent.value,
+        consentVersion: CONSENT_VERSION,
+      }),
       token,
     );
     uni.showToast({ title: "设置已保存", icon: "success" });
@@ -99,11 +118,20 @@ onLoad(() => {
       <text class="subtitle">你可以随时修改昵称，或撤回 AI 处理授权。</text>
     </header>
 
-    <view v-if="loading" class="state-card">
+    <view v-if="loadState === 'loading'" class="state-card">
       <text>正在加载个人设置…</text>
     </view>
 
-    <main v-else class="settings-card">
+    <view v-else-if="canRetryLoad" class="state-card state-card--error">
+      <text class="state-card__mark">!</text>
+      <text>{{ errorMessage ?? "个人资料加载失败。" }}</text>
+      <text class="state-card__note">
+        为避免误改你的授权状态，加载成功后才能修改设置。
+      </text>
+      <button class="state-card__action" @click="loadProfile">重新加载</button>
+    </view>
+
+    <main v-else-if="canEdit" class="settings-card">
       <label class="field">
         <text class="field__label">称呼</text>
         <input
@@ -142,7 +170,7 @@ onLoad(() => {
 
       <text v-if="errorMessage" class="error-message">{{ errorMessage }}</text>
 
-      <button class="save-action" :disabled="saving" @click="save">
+      <button class="save-action" :disabled="!canSubmit" @click="save">
         {{ saveLabel }}
       </button>
 
@@ -232,6 +260,43 @@ onLoad(() => {
   padding: 48rpx 32rpx;
   color: $color-muted;
   font-size: 24rpx;
+
+  &--error {
+    display: grid;
+    gap: 20rpx;
+    justify-items: center;
+    padding: 64rpx 32rpx;
+    text-align: center;
+  }
+
+  &__mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 70rpx;
+    height: 70rpx;
+    border-radius: 50%;
+    background: $color-paper-deep;
+    color: $color-vermilion;
+    font-family: "Songti SC", serif;
+    font-size: 32rpx;
+  }
+
+  &__note {
+    color: $color-muted;
+    font-size: 20rpx;
+    line-height: 1.6;
+  }
+
+  &__action {
+    min-width: 220rpx;
+    height: 88rpx;
+    border-radius: 999rpx;
+    background: $color-ink;
+    color: $color-white;
+    font-size: 23rpx;
+    line-height: 88rpx;
+  }
 }
 
 .settings-card {
