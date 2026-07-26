@@ -133,11 +133,16 @@ async def test_error_detail_is_truncated() -> None:
     assert len(event.last_error) == 1_000
 
 
-def test_dead_letter_is_not_counted_as_failed() -> None:
-    """死信必须与 failed 分开统计，否则会永久钉住重试积压告警。"""
+def test_dead_letter_is_a_distinct_terminal_status() -> None:
+    """死信必须是独立取值，否则无法与 failed 分开统计。
 
-    assert OutboxStatus.DEAD_LETTER is not OutboxStatus.FAILED
-    assert OutboxStatus.DEAD_LETTER.value == "DEAD_LETTER"
+    两者混在一起时，一条毒事件会永久钉住重试积压告警。
+    """
+
+    values = {status.value for status in OutboxStatus}
+    assert "DEAD_LETTER" in values
+    # 五个状态两两不同：任何合并都会让上面的分开统计失效。
+    assert len(values) == len(list(OutboxStatus)) == 5
 
 
 def test_max_attempts_must_be_positive() -> None:

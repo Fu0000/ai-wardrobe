@@ -5,16 +5,12 @@ purge_account」，不依赖数据库；本文件在真实 PostgreSQL 上验证�
 零残留」，并确认清理是按用户收敛而非全表清空。两层互补，缺一不可。
 """
 
-import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
-from app.database import models as database_models  # noqa: F401
 from app.modules.assets.models import (
     AssetKind,
     AssetStatus,
@@ -66,123 +62,94 @@ from app.modules.jobs.models import (
     JobStatus,
     JobTaskType,
 )
+from tests.integration.markers import requires_services
 
-RUN_INTEGRATION_TESTS = os.getenv("AIW_RUN_INTEGRATION_TESTS") == "1"
-
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(
-        not RUN_INTEGRATION_TESTS,
-        reason="set AIW_RUN_INTEGRATION_TESTS=1 with disposable PostgreSQL and Redis",
-    ),
-]
+pytestmark = requires_services
 
 
-async def test_purge_account_leaves_no_user_owned_rows() -> None:
+async def test_purge_account_leaves_no_user_owned_rows(session: AsyncSession) -> None:
     """注销后，除登记豁免外的每张用户数据表都必须零残留。"""
 
-    settings = Settings()
-    engine = create_async_engine(settings.database_url)
-    connection = await engine.connect()
-    transaction = await connection.begin()
-    try:
-        async with AsyncSession(bind=connection, expire_on_commit=False) as session:
-            owner = User(id=uuid4())
-            bystander = User(id=uuid4())
-            session.add_all([owner, bystander])
-            await session.flush()
+    owner = User(id=uuid4())
+    bystander = User(id=uuid4())
+    session.add_all([owner, bystander])
+    await session.flush()
 
-            deletion_job, deletion_generation_job = await _populate(
-                session,
-                owner=owner,
-                bystander=bystander,
-            )
+    deletion_job, deletion_generation_job = await _populate(
+        session,
+        owner=owner,
+        bystander=bystander,
+    )
 
-            owned = user_owned_tables()
-            # 先证明数据真的造出来了，否则「清理后为空」会退化成空转。
-            populated = await _tables_with_rows(session, owned=owned, user_id=owner.id)
-            missing = set(owned) - populated
-            assert not missing, f"这些表在 purge 前无数据，无法证明它们被清理：{sorted(missing)}"
+    owned = user_owned_tables()
+    # 先证明数据真的造出来了，否则「清理后为空」会退化成空转。
+    populated = await _tables_with_rows(session, owned=owned, user_id=owner.id)
+    missing = set(owned) - populated
+    assert not missing, f"这些表在 purge 前无数据，无法证明它们被清理：{sorted(missing)}"
 
-            await DeletionRepository(session).purge_account(
-                user_id=owner.id,
-                keep_deletion_id=deletion_job.id,
-                keep_generation_job_id=deletion_generation_job.id,
-            )
-            await session.flush()
+    await DeletionRepository(session).purge_account(
+        user_id=owner.id,
+        keep_deletion_id=deletion_job.id,
+        keep_generation_job_id=deletion_generation_job.id,
+    )
+    await session.flush()
 
-            residual = await _tables_with_rows(session, owned=owned, user_id=owner.id)
-            leaked = residual - set(PURGE_EXEMPT_TABLES)
-            assert not leaked, (
-                f"注销后仍残留用户数据：{sorted(leaked)}；"
-                "请把这些表补进 purge_account，而不是加入 PURGE_EXEMPT_TABLES。"
-            )
+    residual = await _tables_with_rows(session, owned=owned, user_id=owner.id)
+    leaked = residual - set(PURGE_EXEMPT_TABLES)
+    assert not leaked, (
+        f"注销后仍残留用户数据：{sorted(leaked)}；"
+        "请把这些表补进 purge_account，而不是加入 PURGE_EXEMPT_TABLES。"
+    )
 
-            # 豁免表必须真的留存，否则说明豁免登记与实现已脱节。
-            assert residual == set(PURGE_EXEMPT_TABLES)
+    # 豁免表必须真的留存，否则说明豁免登记与实现已脱节。
+    assert residual == set(PURGE_EXEMPT_TABLES)
 
-            # 用户主行保留为墓碑，标识列已随 user_identities 一并删除。
-            tombstone = await session.get(User, owner.id)
-            assert tombstone is not None
-            assert tombstone.status is UserStatus.DELETED
+    # 用户主行保留为墓碑，标识列已随 user_identities 一并删除。
+    tombstone = await session.get(User, owner.id)
+    assert tombstone is not None
+    assert tombstone.status is UserStatus.DELETED
 
-            # 旁观者数据完好，证明清理按用户收敛而非全表清空。
-            bystander_rows = await _tables_with_rows(
-                session,
-                owned=owned,
-                user_id=bystander.id,
-            )
-            assert {"beta_feedback", "user_identities", "user_profiles"} <= bystander_rows
-    finally:
-        if transaction.is_active:
-            await transaction.rollback()
-        await connection.close()
-        await engine.dispose()
+    # 旁观者数据完好，证明清理按用户收敛而非全表清空。
+    bystander_rows = await _tables_with_rows(
+        session,
+        owned=owned,
+        user_id=bystander.id,
+    )
+    assert {"beta_feedback", "user_identities", "user_profiles"} <= bystander_rows
 
 
-async def test_beta_feedback_is_removed_on_account_purge() -> None:
+async def test_beta_feedback_is_removed_on_account_purge(session: AsyncSession) -> None:
     """回归锁定：反馈内容含用户自由文本，注销后不得留存。"""
 
-    settings = Settings()
-    engine = create_async_engine(settings.database_url)
-    connection = await engine.connect()
-    transaction = await connection.begin()
-    try:
-        async with AsyncSession(bind=connection, expire_on_commit=False) as session:
-            owner = User(id=uuid4())
-            bystander = User(id=uuid4())
-            session.add_all([owner, bystander])
-            await session.flush()
+    owner = User(id=uuid4())
+    bystander = User(id=uuid4())
+    session.add_all([owner, bystander])
+    await session.flush()
 
-            deletion_job, deletion_generation_job = await _populate(
-                session,
-                owner=owner,
-                bystander=bystander,
-            )
+    deletion_job, deletion_generation_job = await _populate(
+        session,
+        owner=owner,
+        bystander=bystander,
+    )
 
-            await DeletionRepository(session).purge_account(
-                user_id=owner.id,
-                keep_deletion_id=deletion_job.id,
-                keep_generation_job_id=deletion_generation_job.id,
-            )
-            await session.flush()
+    await DeletionRepository(session).purge_account(
+        user_id=owner.id,
+        keep_deletion_id=deletion_job.id,
+        keep_generation_job_id=deletion_generation_job.id,
+    )
+    await session.flush()
 
-            result = await session.execute(
-                text("SELECT count(*) FROM beta_feedback WHERE user_id = :user_id"),
-                {"user_id": owner.id},
-            )
-            assert result.scalar_one() == 0
+    result = await session.execute(
+        text("SELECT count(*) FROM beta_feedback WHERE user_id = :user_id"),
+        {"user_id": owner.id},
+    )
+    assert result.scalar_one() == 0
 
-            result = await session.execute(
-                text("SELECT count(*) FROM beta_feedback WHERE user_id = :user_id"),
-                {"user_id": bystander.id},
-            )
-            assert result.scalar_one() == 1
-    finally:
-        if transaction.is_active:
-            await transaction.rollback()
-        await connection.close()
-        await engine.dispose()
+    result = await session.execute(
+        text("SELECT count(*) FROM beta_feedback WHERE user_id = :user_id"),
+        {"user_id": bystander.id},
+    )
+    assert result.scalar_one() == 1
 
 
 async def _tables_with_rows(

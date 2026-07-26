@@ -166,7 +166,9 @@ async def test_missing_reservation_does_not_abort_the_batch() -> None:
     assert second.status is JobStatus.TIMED_OUT
 
 
-async def test_unexpected_quota_error_is_not_swallowed() -> None:
+async def test_unexpected_quota_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """只豁免「无预留」，其余配额异常必须上抛而非静默吞掉。"""
 
     class _Underflow(_RecordingQuota):
@@ -175,15 +177,11 @@ async def test_unexpected_quota_error_is_not_swallowed() -> None:
 
     job = _job(lease_expires_at=datetime.now(UTC) - timedelta(hours=2))
     reaper, _ = _reaper([job])
-    reaper_module = __import__("app.modules.jobs.reaper", fromlist=["QuotaRepository"])
-    original = reaper_module.QuotaRepository
-    reaper_module.QuotaRepository = _Underflow
-    try:
-        with pytest.raises(QuotaError) as excinfo:
-            await reaper.reap_once()
-        assert excinfo.value.code == "QUOTA_COUNTER_UNDERFLOW"
-    finally:
-        reaper_module.QuotaRepository = original
+    monkeypatch.setattr("app.modules.jobs.reaper.QuotaRepository", _Underflow)
+
+    with pytest.raises(QuotaError) as excinfo:
+        await reaper.reap_once()
+    assert excinfo.value.code == "QUOTA_COUNTER_UNDERFLOW"
 
 
 async def test_empty_batch_is_a_no_op() -> None:

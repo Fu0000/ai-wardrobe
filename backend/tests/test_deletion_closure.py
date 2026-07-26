@@ -45,12 +45,14 @@ def _models_deleted_in_purge_account() -> set[str]:
 
 
 def _model_name_by_table() -> dict[str, str]:
+    from sqlalchemy import Table
+
     from app.database.base import Base
 
     return {
         mapper.local_table.name: mapper.class_.__name__
         for mapper in Base.registry.mappers
-        if mapper.local_table is not None
+        if isinstance(mapper.local_table, Table)
     }
 
 
