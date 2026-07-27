@@ -30,6 +30,7 @@ celery_app.conf.update(
     task_routes={
         "ai_wardrobe.dispatch_outbox": {"queue": "maintenance"},
         "ai_wardrobe.reap_stale_jobs": {"queue": "maintenance"},
+        "ai_wardrobe.cleanup_orphan_uploads": {"queue": "maintenance"},
         "ai_wardrobe.run_style_diagnosis": {"queue": "ai_fast"},
         "ai_wardrobe.run_style_optimization": {"queue": "image_generation"},
         "ai_wardrobe.run_share_asset": {"queue": "media_generation"},
@@ -43,6 +44,10 @@ celery_app.conf.update(
         "reap-stale-jobs": {
             "task": "ai_wardrobe.reap_stale_jobs",
             "schedule": settings.stale_job_reap_interval_seconds,
+        },
+        "cleanup-orphan-uploads": {
+            "task": "ai_wardrobe.cleanup_orphan_uploads",
+            "schedule": settings.orphan_upload_cleanup_interval_seconds,
         },
     },
 )

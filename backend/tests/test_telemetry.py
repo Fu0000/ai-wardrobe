@@ -53,3 +53,19 @@ def test_product_action_rejects_unbounded_labels() -> None:
             action="diagnosis_requested",
             outcome="user_supplied",
         )
+
+
+def test_orphan_cleanup_metric_uses_bounded_outcomes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counter = _Counter()
+    monkeypatch.setattr(telemetry, "_orphan_upload_cleanup", counter)
+
+    telemetry.record_orphan_upload_cleanup(outcome="cleaned", count=3)
+    telemetry.record_orphan_upload_cleanup(outcome="skipped_stale", count=0)
+
+    assert counter.calls == [(3, {"aiw.outcome": "cleaned"})]
+    with pytest.raises(ValueError, match="unsupported orphan"):
+        telemetry.record_orphan_upload_cleanup(outcome="asset-id", count=1)
+    with pytest.raises(ValueError, match="nonnegative"):
+        telemetry.record_orphan_upload_cleanup(outcome="cleaned", count=-1)

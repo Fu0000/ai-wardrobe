@@ -76,6 +76,7 @@ def _raise_asset_error(error: AssetServiceError) -> Never:
     status_by_code = {
         "ASSET_NOT_FOUND": 404,
         "ASSET_NOT_READY": 409,
+        "ASSET_NOT_COMPLETABLE": 409,
         "ASSET_UPLOAD_INCOMPLETE": 409,
         "ASSET_STORAGE_UNAVAILABLE": 503,
         "IMAGE_TOO_LARGE": 413,
@@ -84,6 +85,7 @@ def _raise_asset_error(error: AssetServiceError) -> Never:
     user_message_by_code = {
         "ASSET_UPLOAD_INCOMPLETE": "图片还没有上传完成，请稍后重试。",
         "ASSET_NOT_READY": "图片还没有准备好。",
+        "ASSET_NOT_COMPLETABLE": "上传已过期，请重新选择图片。",
         "ASSET_STORAGE_UNAVAILABLE": "图片服务暂时不可用，请稍后重试。",
         "IMAGE_TOO_LARGE": "图片大小不能超过 20MB。",
         "UNSUPPORTED_IMAGE_TYPE": "请选择 JPEG、PNG 或 WebP 图片。",

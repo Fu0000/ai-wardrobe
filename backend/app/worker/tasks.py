@@ -5,6 +5,8 @@ from uuid import UUID
 from app.core.config import get_settings
 from app.core.telemetry import WorkerSpan
 from app.database.session import Database
+from app.modules.assets.cleanup import OrphanUploadCleaner
+from app.modules.assets.storage import build_object_storage
 from app.modules.diagnosis.executor import DiagnosisExecutor, RetryableDiagnosisError
 from app.modules.events.dispatcher import CeleryEventPublisher, OutboxDispatcher
 from app.modules.governance.deletion_executor import (
@@ -43,6 +45,34 @@ def reap_stale_jobs() -> int:
                 await database.dispose()
 
     return asyncio.run(reap())
+
+
+@celery_app.task(name="ai_wardrobe.cleanup_orphan_uploads")  # type: ignore[untyped-decorator]
+def cleanup_orphan_uploads() -> int:
+    """删除过期未完成上传的对象与数据库行。"""
+
+    async def cleanup() -> int:
+        with WorkerSpan(
+            name="celery cleanup_orphan_uploads",
+            headers={},
+            job_id=None,
+        ) as operation:
+            settings = get_settings()
+            database = Database(settings)
+            try:
+                outcome = await OrphanUploadCleaner(
+                    settings=settings,
+                    database=database,
+                    object_storage=build_object_storage(settings),
+                ).cleanup_once()
+                operation.set_outcome(
+                    "completed" if outcome.retryable_failures == 0 else "retry_scheduled"
+                )
+                return outcome.cleaned
+            finally:
+                await database.dispose()
+
+    return asyncio.run(cleanup())
 
 
 @celery_app.task(name="ai_wardrobe.dispatch_outbox")  # type: ignore[untyped-decorator]

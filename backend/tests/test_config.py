@@ -75,6 +75,14 @@ def test_optimization_lease_must_cover_generation_and_critic_retries() -> None:
         Settings(optimization_execution_lease_seconds=229)
 
 
+def test_orphan_upload_ttl_must_outlive_upload_ticket() -> None:
+    with pytest.raises(ValueError, match="orphan upload TTL"):
+        Settings(
+            cos_upload_ticket_ttl_seconds=900,
+            orphan_upload_ttl_seconds=900,
+        )
+
+
 def test_canary_percentage_requires_a_candidate_model() -> None:
     with pytest.raises(ValidationError, match="canary model is required"):
         Settings(ai_canary_percentage=10)

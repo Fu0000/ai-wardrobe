@@ -105,3 +105,19 @@ groups:
         annotations:
           summary: Privacy deletion jobs are failing
           runbook: Check COS deletion errors first, then DB transaction and fenced execution state.
+
+      - alert: AIWardrobeOrphanUploadCleanupFailures
+        expr: |
+          sum(
+            increase(
+              aiw_assets_orphan_upload_cleanup_total{
+                aiw_outcome="retryable_failure"
+              }[15m]
+            )
+          ) > 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: Orphan upload cleanup cannot delete objects
+          runbook: Check COS credentials and availability, then inspect UPLOAD_EXPIRED rows.

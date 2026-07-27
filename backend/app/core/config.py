@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     stale_job_grace_seconds: int = 600
     stale_job_batch_size: int = 50
     stale_job_reap_interval_seconds: float = 60.0
+    # 上传票据过期后保留一段完成宽限，再由清理器删除 DB 行与对象存储残留。
+    orphan_upload_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
+    orphan_upload_cleanup_lease_seconds: int = Field(default=900, ge=60, le=3_600)
+    orphan_upload_cleanup_batch_size: int = Field(default=50, ge=1, le=500)
+    orphan_upload_cleanup_interval_seconds: float = Field(default=300, ge=10, le=3_600)
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> "Settings":
@@ -167,6 +172,8 @@ class Settings(BaseSettings):
             raise ValueError("stale job batch size must be positive")
         if self.stale_job_reap_interval_seconds <= 0:
             raise ValueError("stale job reap interval must be positive")
+        if self.orphan_upload_ttl_seconds <= self.cos_upload_ticket_ttl_seconds:
+            raise ValueError("orphan upload TTL must exceed upload ticket TTL")
         if self.outbox_max_attempts <= 0:
             raise ValueError("outbox max attempts must be positive")
         if self.share_execution_lease_seconds < 30:

@@ -26,7 +26,7 @@
 | 后端测试 | 38 个文件，145 个测试函数，`ruff` 与 `mypy --strict`（88 文件）全通过 |
 | 集成测试 | `tests/integration/test_infrastructure.py` 已存在，3 个测试，默认 `skip` |
 | 小程序测试 | 5 个文件，13 个用例，零页面测试、零 services 测试 |
-| 数据库迁移 | 9 版 Alembic，CI 执行空库升级、模型漂移检查与离线 SQL 渲染 |
+| 数据库迁移 | 10 版 Alembic，CI 执行空库升级、模型漂移检查与离线 SQL 渲染 |
 | 埋点事件 | `docs/15` 定义 19 个，已实现 4 个 |
 | Eval 数据集 | 诊断与优化各 1 行示例，`docs/12` 要求各 50+ |
 | 发布状态 | `docs/16` 最终决策为 `NO-GO` |
@@ -208,16 +208,19 @@ Deletion Executor 的领域内状态转换，以及小程序页面交互回归�
 **证据**：CI 已增加 PostgreSQL 空库真实升级与 `alembic check` 模型漂移验证。本地
 Docker 实库验证曾发现 `20260726_0004` 已创建
 `ix_generation_jobs_status_lease`，但 ORM 元数据未声明；现已对齐并增加结构回归测试。
-`AssetStatus.UPLOADING` 仅在 `repository.py:25` 写入、`service.py:133` 校验，无任何按
-`created_at` 扫描清理的逻辑，Beat 中亦无对应任务。
+`OrphanUploadCleaner` 现按 TTL 扫描 `UPLOADING`，通过 `UPLOAD_CLEANING` 租约与
+`updated_at` fencing version 删除 COS 对象和 DB 行；存储故障转入 `UPLOAD_EXPIRED`
+等待重试，Worker 崩溃后的过期认领也可恢复。上传 Complete 使用条件更新，无法把已被
+清理器认领的对象重新标记为 `READY`。Beat 已按 maintenance 队列周期调度。
+清理成功、可重试失败和陈旧认领均上报低基数指标，可重试失败已有独立告警。
 
-**影响**：迁移漂移现可在 CI 阻断。剩余风险是用户取得预签名 URL 后不调用 complete，DB
-行与 COS 对象双双永久滞留 —— 既是无界成本增长，也是未引用用户照片长期留存的隐私暴露。
+**影响**：迁移漂移和孤儿上传的无界留存风险均已在代码层关闭。剩余发布证据是 Staging
+真实 COS 上的对象删除与孤儿计数核对。
 
-**方案**：空库真实 `upgrade head` 与模型漂移检查已落地；剩余工作是新增 Beat 任务，清理
-超过 TTL 的 `UPLOADING` 资产及其 COS 对象。
+**方案**：空库真实升级、模型漂移检查、可恢复的孤儿上传清理任务与完成侧竞态保护均已落地。
 
-**验收**：`docs/16` 的 AST-002「孤儿对象检查」可取得证据。
+**验收**：本地 PostgreSQL 集成测试覆盖过期选择、近期/READY 豁免、对象删除、存储失败
+重试与崩溃租约恢复；上线前仍需在真实 COS 执行 `docs/16` AST-002 的孤儿对象检查。
 
 ### GATE-06 契约一致性修补
 

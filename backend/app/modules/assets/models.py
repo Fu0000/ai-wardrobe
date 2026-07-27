@@ -12,6 +12,8 @@ from app.database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class AssetStatus(StrEnum):
     UPLOADING = "UPLOADING"
+    UPLOAD_EXPIRED = "UPLOAD_EXPIRED"
+    UPLOAD_CLEANING = "UPLOAD_CLEANING"
     READY = "READY"
     FAILED = "FAILED"
     DELETION_PENDING = "DELETION_PENDING"
@@ -35,6 +37,8 @@ class UserAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("width IS NULL OR width > 0", name="width_positive"),
         CheckConstraint("height IS NULL OR height > 0", name="height_positive"),
         Index("ix_user_assets_user_status", "user_id", "status"),
+        Index("ix_user_assets_status_created", "status", "created_at"),
+        Index("ix_user_assets_status_updated", "status", "updated_at"),
         Index("uq_user_assets_object_key", "object_key", unique=True),
     )
 

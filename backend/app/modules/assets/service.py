@@ -160,24 +160,28 @@ class AssetApplicationService:
                 retryable=True,
             ) from error
         except InvalidImageError as error:
-            asset.status = AssetStatus.FAILED
-            await self._repository.flush()
+            marked_failed = await self._repository.fail_if_uploading(
+                asset_id=asset.id,
+                user_id=user_id,
+            )
             raise AssetServiceError(
                 code=error.code,
                 retryable=False,
-                commit_state=True,
+                commit_state=marked_failed,
             ) from error
 
-        asset.status = AssetStatus.READY
-        asset.content_type = validated.content_type
-        asset.size_bytes = metadata.size_bytes
-        asset.width = validated.width
-        asset.height = validated.height
-        asset.checksum_sha256 = (
-            metadata.etag if metadata.etag and len(metadata.etag) == 64 else None
+        completed = await self._repository.complete_if_uploading(
+            asset_id=asset.id,
+            user_id=user_id,
+            content_type=validated.content_type,
+            size_bytes=metadata.size_bytes,
+            width=validated.width,
+            height=validated.height,
+            checksum_sha256=(metadata.etag if metadata.etag and len(metadata.etag) == 64 else None),
         )
-        await self._repository.flush()
-        return self._completed(asset)
+        if completed is None:
+            raise AssetServiceError(code="ASSET_NOT_COMPLETABLE", retryable=False)
+        return self._completed(completed)
 
     async def create_access_url(
         self,

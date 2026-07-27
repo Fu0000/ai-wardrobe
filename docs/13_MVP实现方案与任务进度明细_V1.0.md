@@ -436,18 +436,21 @@ API 创建业务记录与 OutboxEvent
 
 代码实现已启动。以下状态以验证证据为准；Owner 当前仍填写建议角色，进入团队协作时必须落实到具体人员。
 
-当前实施快照（2026-07-26）：
+当前实施快照（2026-07-27）：
 
-- 当前阶段：P0b / W6，隐私删除、依赖感知就绪探针与可观测性已进入本地实现验证；真实基础设施、质量数据与真机验收仍待补齐。
-- `DONE`：17 项。
-- `IN_REVIEW`：48 项。
+- 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已进入本地实库验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
+- `DONE`：18 项。
+- `IN_REVIEW`：47 项。
 - `IN_PROGRESS`：8 项。
-- `BLOCKED`：6 项，本机缺少 Docker Runtime，且尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化研发评估的授权照片，无法执行真实全链路与质量基线。
+- `BLOCKED`：6 项，本机 Docker Runtime 已可用但 Compose 重复启动门禁尚未完成；同时
+  尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化研发评估的授权照片，
+  无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 134 个文件）、154
-  个本地测试、八版 Alembic 离线 SQL、Python 生产依赖 0 个已知漏洞；
+- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 151 个文件）、229
+  个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
+  Python 生产依赖 0 个已知漏洞；
   小程序 ESLint、类型检查、13 个测试、微信构建与 High 依赖漏洞门禁。
-  另有 3 个 PostgreSQL/Redis 基础设施集成测试已纳入 CI，待远端运行留证。
+  其中 23 个 PostgreSQL/Redis 集成测试已纳入 CI。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、AIInvocation、带令牌执行租约、退避轮询、任务恢复、输入质量失败和诊断结果页。
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric。
@@ -518,7 +521,7 @@ API 创建业务记录与 OutboxEvent
 | AST-04 | Asset Complete 与 Registry | 后端 | 1.5d | W2 | AST-02、DB-01 | COS 对象与业务 Asset 正确绑定 | IN_REVIEW |
 | AST-05 | MIME、Magic Number、Dimensions 校验 | 后端 | 1.5d | W2 | AST-04 | 伪造扩展名、超大图、异常尺寸被拒绝 | DONE |
 | AST-06 | Signed URL 和私有访问 | 后端 | 1d | W2 | AST-04、SEC-01 | URL 可过期，不能跨用户获取 | IN_REVIEW |
-| AST-07 | 图片删除和孤儿资产处理 | 后端 | 1.5d | W5 | AST-04 | DB 与 COS 清理可重试、可观测 | IN_REVIEW |
+| AST-07 | 图片删除和孤儿资产处理 | 后端 | 1.5d | W5 | AST-04 | DB 与 COS 清理可重试、可观测 | DONE |
 
 ### 6.5 Job、Outbox、Quota 与限流
 

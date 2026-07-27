@@ -63,6 +63,50 @@ class FakeAssetRepository:
             return self.asset
         return None
 
+    async def complete_if_uploading(
+        self,
+        *,
+        asset_id: UUID,
+        user_id: UUID,
+        content_type: str,
+        size_bytes: int,
+        width: int,
+        height: int,
+        checksum_sha256: str | None,
+    ) -> UserAsset | None:
+        asset = self.asset
+        if (
+            asset is None
+            or asset.id != asset_id
+            or asset.user_id != user_id
+            or asset.status != AssetStatus.UPLOADING
+        ):
+            return None
+        asset.status = AssetStatus.READY
+        asset.content_type = content_type
+        asset.size_bytes = size_bytes
+        asset.width = width
+        asset.height = height
+        asset.checksum_sha256 = checksum_sha256
+        return asset
+
+    async def fail_if_uploading(
+        self,
+        *,
+        asset_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        asset = self.asset
+        if (
+            asset is None
+            or asset.id != asset_id
+            or asset.user_id != user_id
+            or asset.status != AssetStatus.UPLOADING
+        ):
+            return False
+        asset.status = AssetStatus.FAILED
+        return True
+
     async def flush(self) -> None:
         self.flush_count += 1
 
@@ -233,6 +277,39 @@ async def test_complete_upload_does_not_reveal_another_users_asset() -> None:
         )
 
     assert storage.head_count == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_claim_wins_race_against_late_complete() -> None:
+    user_id = uuid4()
+    repository = FakeAssetRepository()
+
+    class ClaimingStorage(FakeObjectStorage):
+        async def head_object(self, *, object_key: str) -> ObjectMetadata:
+            assert repository.asset is not None
+            repository.asset.status = AssetStatus.UPLOAD_CLEANING
+            return await super().head_object(object_key=object_key)
+
+    service = AssetApplicationService(
+        repository=repository,  # type: ignore[arg-type]
+        object_storage=ClaimingStorage(),
+        settings=Settings(),
+    )
+    ticket = await service.create_upload_ticket(
+        user_id=user_id,
+        content_type="image/png",
+        size_bytes=10_000,
+    )
+
+    with pytest.raises(AssetServiceError, match="ASSET_NOT_COMPLETABLE"):
+        await service.complete_upload(
+            user_id=user_id,
+            asset_id=ticket.asset_id,
+            declared_content_type="image/png",
+        )
+
+    assert repository.asset is not None
+    assert repository.asset.status is AssetStatus.UPLOAD_CLEANING
 
 
 @pytest.mark.asyncio

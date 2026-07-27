@@ -58,6 +58,10 @@ _outbox_oldest_pending_age = _meter.create_gauge(
     "aiw.outbox.oldest_pending_age",
     unit="s",
 )
+_orphan_upload_cleanup = _meter.create_counter(
+    "aiw.assets.orphan_upload_cleanup",
+    unit="{asset}",
+)
 _product_actions = _meter.create_counter("aiw.product.actions", unit="{action}")
 
 _WORKER_OUTCOMES = frozenset(
@@ -190,6 +194,16 @@ def record_outbox_backlog(
     _outbox_failed.set(failed_count)
     _outbox_dead_letter.set(dead_letter_count)
     _outbox_oldest_pending_age.set(oldest_pending_age_seconds)
+
+
+def record_orphan_upload_cleanup(*, outcome: str, count: int) -> None:
+    if outcome not in {"cleaned", "retryable_failure", "skipped_stale"}:
+        raise ValueError("unsupported orphan upload cleanup outcome")
+    if count < 0:
+        raise ValueError("orphan upload cleanup count must be nonnegative")
+    if count == 0:
+        return
+    _orphan_upload_cleanup.add(count, {"aiw.outcome": outcome})
 
 
 def record_product_action(*, action: str, outcome: str) -> None:

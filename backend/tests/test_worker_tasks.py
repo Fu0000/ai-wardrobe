@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -13,6 +14,7 @@ from app.modules.growth.executor import RetryableShareError
 from app.modules.optimization.executor import RetryableOptimizationError
 from app.worker.celery_app import celery_app
 from app.worker.tasks import (
+    cleanup_orphan_uploads,
     run_deletion,
     run_share_asset,
     run_style_diagnosis,
@@ -148,7 +150,33 @@ def test_worker_delivery_and_queue_configuration_is_loss_resistant() -> None:
     assert celery_app.conf.worker_prefetch_multiplier == 1
 
     routes = celery_app.conf.task_routes
+    assert routes["ai_wardrobe.cleanup_orphan_uploads"]["queue"] == "maintenance"
     assert routes["ai_wardrobe.run_style_diagnosis"]["queue"] == "ai_fast"
     assert routes["ai_wardrobe.run_style_optimization"]["queue"] == "image_generation"
     assert routes["ai_wardrobe.run_share_asset"]["queue"] == "media_generation"
     assert routes["ai_wardrobe.run_deletion"]["queue"] == "maintenance"
+    assert (
+        celery_app.conf.beat_schedule["cleanup-orphan-uploads"]["task"]
+        == "ai_wardrobe.cleanup_orphan_uploads"
+    )
+
+
+def test_orphan_cleanup_task_disposes_database_and_reports_cleaned_count() -> None:
+    cleaner = MagicMock()
+    cleaner.cleanup_once = AsyncMock(
+        return_value=SimpleNamespace(cleaned=3, retryable_failures=0),
+    )
+    database = MagicMock()
+    database.dispose = AsyncMock()
+
+    with (
+        patch("app.worker.tasks.get_settings", return_value=MagicMock()),
+        patch("app.worker.tasks.Database", return_value=database),
+        patch("app.worker.tasks.build_object_storage", return_value=MagicMock()),
+        patch("app.worker.tasks.OrphanUploadCleaner", return_value=cleaner),
+    ):
+        result = cleanup_orphan_uploads.apply(throw=True)
+
+    assert result.get() == 3
+    cleaner.cleanup_once.assert_awaited_once_with()
+    database.dispose.assert_awaited_once()
