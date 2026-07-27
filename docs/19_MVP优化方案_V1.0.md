@@ -247,13 +247,25 @@ Docker 实库验证曾发现 `20260726_0004` 已创建
 
 ### ARCH-01 抽取 Job 执行骨架
 
-**证据**：四个 Executor 合计 1700 行（optimization 592 / growth 384 / diagnosis 381 / deletion 343），结构约 85% 同构。`_prepare` 的租约恢复阶梯在 `optimization/executor.py:406-432`、`growth/executor.py:183-210`、`diagnosis/executor.py:239-267` 三处逐字重复；`finalize_failure` 的 Token Fencing 在 `optimization/executor.py:357-376` 与 `growth/executor.py:143-161` 逐字相同。
+状态：**已完成。**
 
-**影响**：重复的恰是安全关键逻辑。在一处修好 Fencing 缺陷，另外三处会静默残留 —— 而它们零测试。这是本仓库风险最高的重复。
+`app/modules/jobs/execution.py` 已提供唯一的 `JobExecutionHarness`，统一处理：
 
-**方案**：抽取 `JobExecutionHarness`，统一承担租约获取、陈旧检测、终态转换与失败收敛；各 Executor 只保留领域逻辑。抽取后针对 Harness 集中补测，一次覆盖四条链路。
+- PENDING / QUEUED / FAILED_RETRYABLE 到 PROCESSING 的租约认领。
+- 有效租约拒绝抢占、过期租约恢复和新执行令牌生成。
+- PROCESSING / QUALITY_CHECKING 的令牌隔离和可重试失败转换。
+- 携带令牌与无令牌 finalizer 的不同安全边界。
+- COMPLETED / FAILED_FINAL / TIMED_OUT / CANCELLED 终态不可复活或重写。
 
-**依赖**：需 GATE-04 的 `conftest.py` 先行，否则无法为 Harness 写有意义的测试。
+Diagnosis、Optimization、Share、Deletion 四个 Executor 只保留领域状态、Quota 和资源
+清理钩子，源文件中不再直接读写租约到期字段，也不再各自实现
+`STALE_EXECUTION_RECOVERED`。四个 Executor 合计 1546 行，公共安全逻辑 154 行；
+总体行数与 1700 行基线相同，收益来自消除四份发散实现，而非追求表面减行。
+
+自动化验证包括租约认领、有效租约拒绝、过期恢复、四类终态、Token Fencing、
+Retryable 转换和 `TIMED_OUT` 迟到 finalizer；另有结构约束测试防止四个 Executor
+重新写回租约逻辑。后端严格 Mypy、Ruff、246 个单元/契约/真实 PostgreSQL/Redis
+测试和 Alembic 漂移检查全部通过。
 
 ### ARCH-02 拆解 `OptimizationExecutor.run`
 

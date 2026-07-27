@@ -445,7 +445,7 @@ API 创建业务记录与 OutboxEvent
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 152 个文件）、234
+- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 155 个文件）、246
   个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
   小程序 ESLint、类型检查、46 个测试、微信构建与 High 依赖漏洞门禁。
@@ -456,7 +456,10 @@ API 创建业务记录与 OutboxEvent
 - 远端 CI 证据：GitHub Actions
   [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 在
   `develop@613a86a` 上完成，Backend 与 Miniapp Job 均为 `success`。
-- W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、AIInvocation、带令牌执行租约、退避轮询、任务恢复、输入质量失败和诊断结果页。
+- W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
+  Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
+  AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
+  输入质量失败和诊断结果页。
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric。
 - W4 待验收：真实 COS/OpenAI 图片编辑与 Critic 联调、50+ 授权 Before/After 样本、双人盲评、Critic First-pass、P90 和单位成本基线、微信真机保存图片。

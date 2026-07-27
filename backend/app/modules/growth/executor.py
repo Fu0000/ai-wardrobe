@@ -19,6 +19,7 @@ from app.modules.growth.repository import (
     GrowthRepository,
     ShareExecutionContext,
 )
+from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.models import JobStatus
 from app.modules.jobs.state_machine import transition_job
 
@@ -42,6 +43,10 @@ class ShareAssetExecutor:
     def __init__(self, *, settings: Settings, database: Database) -> None:
         self._settings = settings
         self._database = database
+        self._execution = JobExecutionHarness(
+            lease_seconds=settings.share_execution_lease_seconds,
+            stale_user_message="分享任务已恢复，正在继续生成。",
+        )
 
     async def run(self, job_id: UUID) -> str:
         try:
@@ -139,33 +144,13 @@ class ShareAssetExecutor:
             if context is None:
                 return False
             job = context.job
-            if job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-            }:
-                return False
-            now = datetime.now(UTC)
-            if (
-                expected_execution_token is not None
-                and job.execution_token != expected_execution_token
-            ):
-                return False
-            if (
-                expected_execution_token is None
-                and job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}
-                and job.execution_lease_expires_at is not None
-                and job.execution_lease_expires_at > now
-            ):
-                return False
-            if job.status == JobStatus.PENDING:
-                transition_job(job, JobStatus.QUEUED)
-            transition_job(
+            if not self._execution.finalize_failure(
                 job,
-                JobStatus.FAILED_FINAL,
-                error_code=code,
+                code=code,
                 user_message=user_message,
-            )
+                expected_execution_token=expected_execution_token,
+            ):
+                return False
             context.share.status = ShareStatus.FAILED
             await session.commit()
             return True
@@ -180,41 +165,17 @@ class ShareAssetExecutor:
             if job_context is None:
                 return None
             job = job_context.job
-            now = datetime.now(UTC)
-            if job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-                JobStatus.TIMED_OUT,
-            }:
+            claim = self._execution.claim(job)
+            if claim is None:
                 return None
-            if job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}:
-                if (
-                    job.execution_lease_expires_at is not None
-                    and job.execution_lease_expires_at > now
-                ):
-                    return None
-                transition_job(
-                    job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code="STALE_EXECUTION_RECOVERED",
-                    user_message="分享任务已恢复，正在继续生成。",
-                )
-            if job.status in {JobStatus.PENDING, JobStatus.FAILED_RETRYABLE}:
-                transition_job(job, JobStatus.QUEUED)
-            transition_job(job, JobStatus.PROCESSING)
-            execution_token = str(uuid4())
-            job.execution_token = execution_token
-            job.execution_lease_expires_at = now + timedelta(
-                seconds=self._settings.share_execution_lease_seconds
-            )
+            execution_token = claim.execution_token
             context = await repository.execution_context(job_id=job_id)
             if context is None:
-                transition_job(
+                self._execution.finalize_failure(
                     job,
-                    JobStatus.FAILED_FINAL,
-                    error_code="SHARE_SOURCE_NOT_FOUND",
+                    code="SHARE_SOURCE_NOT_FOUND",
                     user_message="用于分享的图片已不存在，请重新生成优化结果。",
+                    expected_execution_token=execution_token,
                 )
                 job_context.share.status = ShareStatus.FAILED
                 await session.commit()
@@ -267,8 +228,10 @@ class ShareAssetExecutor:
             )
             return bool(
                 context
-                and context.job.status == JobStatus.PROCESSING
-                and context.job.execution_token == execution_token
+                and self._execution.is_current(
+                    context.job,
+                    execution_token=execution_token,
+                )
             )
 
     async def _complete(
@@ -290,23 +253,18 @@ class ShareAssetExecutor:
                     job_id=job_id,
                     for_update=True,
                 )
-                if (
-                    job_context is not None
-                    and job_context.job.status == JobStatus.PROCESSING
-                    and job_context.job.execution_token == execution_token
+                if job_context is not None and self._execution.finalize_failure(
+                    job_context.job,
+                    code="SHARE_SOURCE_NOT_FOUND",
+                    user_message="用于分享的图片已不存在，请重新生成优化结果。",
+                    expected_execution_token=execution_token,
                 ):
-                    transition_job(
-                        job_context.job,
-                        JobStatus.FAILED_FINAL,
-                        error_code="SHARE_SOURCE_NOT_FOUND",
-                        user_message="用于分享的图片已不存在，请重新生成优化结果。",
-                    )
                     job_context.share.status = ShareStatus.FAILED
                     await session.commit()
                 return False
-            if (
-                context.job.status != JobStatus.PROCESSING
-                or context.job.execution_token != execution_token
+            if not self._execution.is_current(
+                context.job,
+                execution_token=execution_token,
             ):
                 return False
             transition_job(context.job, JobStatus.QUALITY_CHECKING)
@@ -350,7 +308,11 @@ class ShareAssetExecutor:
             )
             context.job.result_reference_type = "ShareRecord"
             context.job.result_reference_id = context.share.id
-            transition_job(context.job, JobStatus.COMPLETED)
+            if not self._execution.complete(
+                context.job,
+                execution_token=execution_token,
+            ):
+                return False
             await session.commit()
             return True
 
@@ -367,18 +329,14 @@ class ShareAssetExecutor:
                 job_id=job_id,
                 for_update=True,
             )
-            if context is None or context.job.execution_token != execution_token:
+            if context is None:
                 return False
-            if context.job.status in {
-                JobStatus.PROCESSING,
-                JobStatus.QUALITY_CHECKING,
-            }:
-                transition_job(
-                    context.job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code=code,
-                    user_message=user_message,
-                )
-                await session.commit()
-                return True
-            return False
+            if not self._execution.mark_retryable(
+                context.job,
+                code=code,
+                user_message=user_message,
+                execution_token=execution_token,
+            ):
+                return False
+            await session.commit()
+            return True

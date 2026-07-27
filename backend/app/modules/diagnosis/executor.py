@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import ValidationError
 
@@ -28,6 +27,7 @@ from app.modules.diagnosis.repository import (
 )
 from app.modules.diagnosis.schema import DiagnosisOutput, InputQuality
 from app.modules.governance.quota import QuotaRepository
+from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
 from app.modules.jobs.state_machine import transition_job
@@ -51,6 +51,10 @@ class DiagnosisExecutor:
     def __init__(self, *, settings: Settings, database: Database) -> None:
         self._settings = settings
         self._database = database
+        self._execution = JobExecutionHarness(
+            lease_seconds=settings.diagnosis_execution_lease_seconds,
+            stale_user_message="任务已恢复，正在继续分析。",
+        )
 
     async def run(self, job_id: UUID) -> str:
         try:
@@ -195,33 +199,13 @@ class DiagnosisExecutor:
             )
             if context is None:
                 return False
-            if context.job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-            }:
-                return False
-            now = datetime.now(UTC)
-            if (
-                expected_execution_token is not None
-                and context.job.execution_token != expected_execution_token
-            ):
-                return False
-            if (
-                expected_execution_token is None
-                and context.job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}
-                and context.job.execution_lease_expires_at is not None
-                and context.job.execution_lease_expires_at > now
-            ):
-                return False
-            if context.job.status == JobStatus.PENDING:
-                transition_job(context.job, JobStatus.QUEUED)
-            transition_job(
+            if not self._execution.finalize_failure(
                 context.job,
-                JobStatus.FAILED_FINAL,
-                error_code=code,
+                code=code,
                 user_message=user_message,
-            )
+                expected_execution_token=expected_execution_token,
+            ):
+                return False
             context.diagnosis.status = DiagnosisStatus.FAILED
             await QuotaRepository(session).release(job_id=job_id)
             await session.commit()
@@ -237,45 +221,21 @@ class DiagnosisExecutor:
             if context is None:
                 return None
             job = context.job
-            now = datetime.now(UTC)
-            if job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-                JobStatus.TIMED_OUT,
-            }:
+            claim = self._execution.claim(job)
+            if claim is None:
                 return None
-            if job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}:
-                if (
-                    job.execution_lease_expires_at is not None
-                    and job.execution_lease_expires_at > now
-                ):
-                    return None
-                transition_job(
-                    job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code="STALE_EXECUTION_RECOVERED",
-                    user_message="任务已恢复，正在继续分析。",
-                )
-            if job.status in {JobStatus.PENDING, JobStatus.FAILED_RETRYABLE}:
-                transition_job(job, JobStatus.QUEUED)
-            transition_job(job, JobStatus.PROCESSING)
-            execution_token = str(uuid4())
-            job.execution_token = execution_token
-            job.execution_lease_expires_at = now + timedelta(
-                seconds=self._settings.diagnosis_execution_lease_seconds
-            )
+            execution_token = claim.execution_token
             try:
                 image_url = await object_storage.create_download_url(
                     object_key=context.asset.object_key,
                     expires_in_seconds=self._settings.cos_download_url_ttl_seconds,
                 )
             except ObjectStorageUnavailableError as error:
-                transition_job(
+                self._execution.mark_retryable(
                     job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code="ASSET_STORAGE_UNAVAILABLE",
+                    code="ASSET_STORAGE_UNAVAILABLE",
                     user_message="照片读取失败，正在自动重试。",
+                    execution_token=execution_token,
                 )
                 await session.commit()
                 raise RetryableDiagnosisError(
@@ -303,10 +263,9 @@ class DiagnosisExecutor:
                 job_id=job_id,
                 for_update=True,
             )
-            if (
-                context is None
-                or context.job.status != JobStatus.PROCESSING
-                or context.job.execution_token != execution_token
+            if context is None or not self._execution.is_current(
+                context.job,
+                execution_token=execution_token,
             ):
                 return False
             transition_job(context.job, JobStatus.QUALITY_CHECKING)
@@ -331,7 +290,11 @@ class DiagnosisExecutor:
             context.job.result_reference_type = "StyleDiagnosis"
             context.job.result_reference_id = diagnosis.id
             await QuotaRepository(session).commit(job_id=job_id)
-            transition_job(context.job, JobStatus.COMPLETED)
+            if not self._execution.complete(
+                context.job,
+                execution_token=execution_token,
+            ):
+                return False
             await session.commit()
             return True
 
@@ -364,18 +327,12 @@ class DiagnosisExecutor:
             )
             if context is None:
                 return False
-            if context.job.execution_token != execution_token:
+            if not self._execution.mark_retryable(
+                context.job,
+                code=code,
+                user_message=user_message,
+                execution_token=execution_token,
+            ):
                 return False
-            if context.job.status in {
-                JobStatus.PROCESSING,
-                JobStatus.QUALITY_CHECKING,
-            }:
-                transition_job(
-                    context.job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code=code,
-                    user_message=user_message,
-                )
-                await session.commit()
-                return True
-            return False
+            await session.commit()
+            return True

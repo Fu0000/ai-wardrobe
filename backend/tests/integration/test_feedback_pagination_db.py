@@ -8,8 +8,9 @@ from app.modules.feedback.models import BetaFeedback, FeedbackCategory
 from app.modules.feedback.repository import FeedbackRepository
 from app.modules.feedback.service import FeedbackApplicationService
 from app.modules.identity.models import User
+from tests.integration.markers import requires_services
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, requires_services]
 
 
 async def test_feedback_cursor_pagination_is_stable_and_user_scoped(

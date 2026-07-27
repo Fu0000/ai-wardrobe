@@ -1,6 +1,5 @@
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -27,6 +26,7 @@ from app.modules.assets.storage import (
 )
 from app.modules.diagnosis.models import OptimizationStatus
 from app.modules.governance.quota import QuotaRepository
+from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
 from app.modules.jobs.state_machine import transition_job
@@ -72,6 +72,10 @@ class OptimizationExecutor:
     def __init__(self, *, settings: Settings, database: Database) -> None:
         self._settings = settings
         self._database = database
+        self._execution = JobExecutionHarness(
+            lease_seconds=settings.optimization_execution_lease_seconds,
+            stale_user_message="任务已恢复，正在继续生成。",
+        )
 
     async def run(self, job_id: UUID) -> str:
         try:
@@ -355,33 +359,13 @@ class OptimizationExecutor:
             if record is None:
                 return False
             job = record.job
-            if job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-            }:
-                return False
-            now = datetime.now(UTC)
-            if (
-                expected_execution_token is not None
-                and job.execution_token != expected_execution_token
-            ):
-                return False
-            if (
-                expected_execution_token is None
-                and job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}
-                and job.execution_lease_expires_at is not None
-                and job.execution_lease_expires_at > now
-            ):
-                return False
-            if job.status == JobStatus.PENDING:
-                transition_job(job, JobStatus.QUEUED)
-            transition_job(
+            if not self._execution.finalize_failure(
                 job,
-                JobStatus.FAILED_FINAL,
-                error_code=code,
+                code=code,
                 user_message=user_message,
-            )
+                expected_execution_token=expected_execution_token,
+            ):
+                return False
             record.optimization.status = (
                 OptimizationStatus.REJECTED_BY_CRITIC
                 if rejected_by_critic
@@ -402,42 +386,18 @@ class OptimizationExecutor:
             if record is None:
                 return None
             job = record.job
-            now = datetime.now(UTC)
-            if job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-                JobStatus.TIMED_OUT,
-            }:
+            claim = self._execution.claim(job)
+            if claim is None:
                 return None
-            if job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}:
-                if (
-                    job.execution_lease_expires_at is not None
-                    and job.execution_lease_expires_at > now
-                ):
-                    return None
-                transition_job(
-                    job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code="STALE_EXECUTION_RECOVERED",
-                    user_message="任务已恢复，正在继续生成。",
-                )
-            if job.status in {JobStatus.PENDING, JobStatus.FAILED_RETRYABLE}:
-                transition_job(job, JobStatus.QUEUED)
-            transition_job(job, JobStatus.PROCESSING)
-            execution_token = str(uuid4())
-            job.execution_token = execution_token
-            job.execution_lease_expires_at = now + timedelta(
-                seconds=self._settings.optimization_execution_lease_seconds
-            )
+            execution_token = claim.execution_token
             try:
                 plan = self._plan(record)
             except (ValidationError, ValueError):
-                transition_job(
+                self._execution.finalize_failure(
                     job,
-                    JobStatus.FAILED_FINAL,
-                    error_code="OPTIMIZATION_PLAN_INVALID",
+                    code="OPTIMIZATION_PLAN_INVALID",
                     user_message="这份诊断没有可安全执行的优化计划。",
+                    expected_execution_token=execution_token,
                 )
                 record.optimization.status = OptimizationStatus.FAILED
                 await QuotaRepository(session).release(job_id=job_id)
@@ -498,8 +458,10 @@ class OptimizationExecutor:
             )
             return bool(
                 record
-                and record.job.status == JobStatus.PROCESSING
-                and record.job.execution_token == execution_token
+                and self._execution.is_current(
+                    record.job,
+                    execution_token=execution_token,
+                )
             )
 
     async def _complete(
@@ -522,10 +484,9 @@ class OptimizationExecutor:
                 job_id=job_id,
                 for_update=True,
             )
-            if (
-                record is None
-                or record.job.status != JobStatus.PROCESSING
-                or record.job.execution_token != execution_token
+            if record is None or not self._execution.is_current(
+                record.job,
+                execution_token=execution_token,
             ):
                 return False
             transition_job(record.job, JobStatus.QUALITY_CHECKING)
@@ -558,7 +519,11 @@ class OptimizationExecutor:
             record.job.result_reference_type = "StyleOptimizationResult"
             record.job.result_reference_id = optimization.id
             await QuotaRepository(session).commit(job_id=job_id)
-            transition_job(record.job, JobStatus.COMPLETED)
+            if not self._execution.complete(
+                record.job,
+                execution_token=execution_token,
+            ):
+                return False
             await session.commit()
             return True
 
@@ -575,18 +540,14 @@ class OptimizationExecutor:
                 job_id=job_id,
                 for_update=True,
             )
-            if record is None or record.job.execution_token != execution_token:
+            if record is None:
                 return False
-            if record.job.status in {
-                JobStatus.PROCESSING,
-                JobStatus.QUALITY_CHECKING,
-            }:
-                transition_job(
-                    record.job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code=code,
-                    user_message=user_message,
-                )
-                await session.commit()
-                return True
-            return False
+            if not self._execution.mark_retryable(
+                record.job,
+                code=code,
+                user_message=user_message,
+                execution_token=execution_token,
+            ):
+                return False
+            await session.commit()
+            return True

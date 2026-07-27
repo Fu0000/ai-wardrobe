@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from app.core.config import Settings
 from app.database.session import Database
@@ -14,6 +14,7 @@ from app.modules.governance.deletion_repository import (
     DeletionRepository,
 )
 from app.modules.governance.models import DeletionStatus, DeletionType
+from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.models import JobStatus
 from app.modules.jobs.state_machine import transition_job
 
@@ -42,6 +43,10 @@ class DeletionExecutor:
     def __init__(self, *, settings: Settings, database: Database) -> None:
         self._settings = settings
         self._database = database
+        self._execution = JobExecutionHarness(
+            lease_seconds=settings.deletion_execution_lease_seconds,
+            stale_user_message="删除任务已恢复，正在继续处理。",
+        )
 
     async def run(self, job_id: UUID) -> str:
         try:
@@ -111,33 +116,13 @@ class DeletionExecutor:
             )
             if context is None:
                 return False
-            if context.job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-            }:
-                return False
-            now = datetime.now(UTC)
-            if (
-                expected_execution_token is not None
-                and context.job.execution_token != expected_execution_token
-            ):
-                return False
-            if (
-                expected_execution_token is None
-                and context.job.status in {JobStatus.PROCESSING, JobStatus.QUALITY_CHECKING}
-                and context.job.execution_lease_expires_at is not None
-                and context.job.execution_lease_expires_at > now
-            ):
-                return False
-            if context.job.status == JobStatus.PENDING:
-                transition_job(context.job, JobStatus.QUEUED)
-            transition_job(
+            if not self._execution.finalize_failure(
                 context.job,
-                JobStatus.FAILED_FINAL,
-                error_code=code,
+                code=code,
                 user_message="删除暂时未完成，请手动重试。",
-            )
+                expected_execution_token=expected_execution_token,
+            ):
+                return False
             context.deletion.status = DeletionStatus.FAILED_FINAL
             context.deletion.last_error = code
             context.deletion.next_retry_at = None
@@ -150,48 +135,24 @@ class DeletionExecutor:
             context = await repository.context(job_id=job_id, for_update=True)
             if context is None:
                 return None
+            if context.deletion.status == DeletionStatus.COMPLETED:
+                return None
+            claim = self._execution.claim(context.job)
+            if claim is None:
+                return None
+            execution_token = claim.execution_token
             if context.deletion.deletion_type not in {
                 DeletionType.ACCOUNT,
                 DeletionType.ASSET,
             }:
-                self._fail_unsupported(context)
+                self._fail_unsupported(
+                    context,
+                    expected_execution_token=execution_token,
+                )
                 await session.commit()
                 return None
-            if context.deletion.status == DeletionStatus.COMPLETED or context.job.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED_FINAL,
-                JobStatus.CANCELLED,
-                JobStatus.TIMED_OUT,
-            }:
-                return None
-            now = datetime.now(UTC)
-            if context.job.status in {
-                JobStatus.PROCESSING,
-                JobStatus.QUALITY_CHECKING,
-            }:
-                if (
-                    context.job.execution_lease_expires_at is not None
-                    and context.job.execution_lease_expires_at > now
-                ):
-                    return None
-                transition_job(
-                    context.job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code="STALE_EXECUTION_RECOVERED",
-                    user_message="删除任务已恢复，正在继续处理。",
-                )
+            if claim.recovered_stale_execution:
                 context.deletion.status = DeletionStatus.FAILED_RETRYABLE
-            if context.job.status in {
-                JobStatus.PENDING,
-                JobStatus.FAILED_RETRYABLE,
-            }:
-                transition_job(context.job, JobStatus.QUEUED)
-            transition_job(context.job, JobStatus.PROCESSING)
-            execution_token = str(uuid4())
-            context.job.execution_token = execution_token
-            context.job.execution_lease_expires_at = now + timedelta(
-                seconds=self._settings.deletion_execution_lease_seconds
-            )
             context.deletion.status = DeletionStatus.PROCESSING
             context.deletion.attempt_count += 1
             context.deletion.next_retry_at = None
@@ -204,7 +165,10 @@ class DeletionExecutor:
                 )
                 object_keys = list(plan.object_keys) if plan is not None else []
             else:
-                self._fail_invalid_target(context)
+                self._fail_invalid_target(
+                    context,
+                    expected_execution_token=execution_token,
+                )
                 await session.commit()
                 return None
             await session.commit()
@@ -214,27 +178,31 @@ class DeletionExecutor:
             )
 
     @staticmethod
-    def _fail_unsupported(context: DeletionContext) -> None:
-        if context.job.status == JobStatus.PENDING:
-            transition_job(context.job, JobStatus.QUEUED)
-        transition_job(
+    def _fail_unsupported(
+        context: DeletionContext,
+        *,
+        expected_execution_token: str,
+    ) -> None:
+        JobExecutionHarness.finalize_failure(
             context.job,
-            JobStatus.FAILED_FINAL,
-            error_code="DELETION_TYPE_UNSUPPORTED",
+            code="DELETION_TYPE_UNSUPPORTED",
             user_message="这项删除请求暂时不受支持。",
+            expected_execution_token=expected_execution_token,
         )
         context.deletion.status = DeletionStatus.FAILED_FINAL
         context.deletion.last_error = "DELETION_TYPE_UNSUPPORTED"
 
     @staticmethod
-    def _fail_invalid_target(context: DeletionContext) -> None:
-        if context.job.status == JobStatus.PENDING:
-            transition_job(context.job, JobStatus.QUEUED)
-        transition_job(
+    def _fail_invalid_target(
+        context: DeletionContext,
+        *,
+        expected_execution_token: str,
+    ) -> None:
+        JobExecutionHarness.finalize_failure(
             context.job,
-            JobStatus.FAILED_FINAL,
-            error_code="DELETION_TARGET_INVALID",
+            code="DELETION_TARGET_INVALID",
             user_message="删除目标无效，请重新发起。",
+            expected_execution_token=expected_execution_token,
         )
         context.deletion.status = DeletionStatus.FAILED_FINAL
         context.deletion.last_error = "DELETION_TARGET_INVALID"
@@ -249,10 +217,9 @@ class DeletionExecutor:
         async with self._database.session_factory() as session:
             repository = DeletionRepository(session)
             context = await repository.context(job_id=job_id, for_update=True)
-            if (
-                context is None
-                or context.job.status != JobStatus.PROCESSING
-                or context.job.execution_token != execution_token
+            if context is None or not self._execution.is_current(
+                context.job,
+                execution_token=execution_token,
             ):
                 return CompletionDecision(completed=False, stale=True)
 
@@ -269,7 +236,10 @@ class DeletionExecutor:
                 )
                 current_keys = list(asset_plan.object_keys) if asset_plan is not None else []
             else:
-                self._fail_unsupported(context)
+                self._fail_unsupported(
+                    context,
+                    expected_execution_token=execution_token,
+                )
                 await session.commit()
                 return CompletionDecision(completed=False, stale=True)
 
@@ -307,7 +277,11 @@ class DeletionExecutor:
             context.deletion.next_retry_at = None
             context.job.result_reference_type = "DeletionJob"
             context.job.result_reference_id = context.deletion.id
-            transition_job(context.job, JobStatus.COMPLETED)
+            if not self._execution.complete(
+                context.job,
+                execution_token=execution_token,
+            ):
+                return CompletionDecision(completed=False, stale=True)
             await session.commit()
             return CompletionDecision(completed=True, stale=False)
 
@@ -323,21 +297,17 @@ class DeletionExecutor:
                 job_id=job_id,
                 for_update=True,
             )
-            if context is None or context.job.execution_token != execution_token:
+            if context is None:
                 return False
-            if context.job.status in {
-                JobStatus.PROCESSING,
-                JobStatus.QUALITY_CHECKING,
-            }:
-                transition_job(
-                    context.job,
-                    JobStatus.FAILED_RETRYABLE,
-                    error_code=code,
-                    user_message="删除暂时未完成，系统正在自动重试。",
-                )
-                context.deletion.status = DeletionStatus.FAILED_RETRYABLE
-                context.deletion.last_error = code
-                context.deletion.next_retry_at = datetime.now(UTC) + timedelta(minutes=1)
-                await session.commit()
-                return True
-            return False
+            if not self._execution.mark_retryable(
+                context.job,
+                code=code,
+                user_message="删除暂时未完成，系统正在自动重试。",
+                execution_token=execution_token,
+            ):
+                return False
+            context.deletion.status = DeletionStatus.FAILED_RETRYABLE
+            context.deletion.last_error = code
+            context.deletion.next_retry_at = datetime.now(UTC) + timedelta(minutes=1)
+            await session.commit()
+            return True
