@@ -45,3 +45,17 @@ def test_all_user_resources_have_user_scoping_column() -> None:
 
     for table_name in scoped_tables:
         assert "user_id" in Base.metadata.tables[table_name].columns
+
+
+def test_generation_jobs_metadata_contains_stale_lease_index() -> None:
+    generation_jobs = Base.metadata.tables["generation_jobs"]
+    lease_index = next(
+        index
+        for index in generation_jobs.indexes
+        if index.name == "ix_generation_jobs_status_lease"
+    )
+
+    assert tuple(column.name for column in lease_index.columns) == (
+        "status",
+        "execution_lease_expires_at",
+    )

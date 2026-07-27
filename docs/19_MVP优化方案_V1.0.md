@@ -26,7 +26,7 @@
 | 后端测试 | 38 个文件，145 个测试函数，`ruff` 与 `mypy --strict`（88 文件）全通过 |
 | 集成测试 | `tests/integration/test_infrastructure.py` 已存在，3 个测试，默认 `skip` |
 | 小程序测试 | 5 个文件，13 个用例，零页面测试、零 services 测试 |
-| 数据库迁移 | 8 版 Alembic，CI 仅做离线 SQL 渲染 |
+| 数据库迁移 | 9 版 Alembic，CI 执行空库升级、模型漂移检查与离线 SQL 渲染 |
 | 埋点事件 | `docs/15` 定义 19 个，已实现 4 个 |
 | Eval 数据集 | 诊断与优化各 1 行示例，`docs/12` 要求各 50+ |
 | 发布状态 | `docs/16` 最终决策为 `NO-GO` |
@@ -201,11 +201,17 @@
 
 ### GATE-05 迁移与孤儿资产
 
-**证据**：CI 仅执行 `alembic upgrade head --sql`（离线 SQL 渲染），无真实空库升级验证。`AssetStatus.UPLOADING` 仅在 `repository.py:25` 写入、`service.py:133` 校验，无任何按 `created_at` 扫描清理的逻辑，Beat 中亦无对应任务。
+**证据**：CI 已增加 PostgreSQL 空库真实升级与 `alembic check` 模型漂移验证。本地
+Docker 实库验证曾发现 `20260726_0004` 已创建
+`ix_generation_jobs_status_lease`，但 ORM 元数据未声明；现已对齐并增加结构回归测试。
+`AssetStatus.UPLOADING` 仅在 `repository.py:25` 写入、`service.py:133` 校验，无任何按
+`created_at` 扫描清理的逻辑，Beat 中亦无对应任务。
 
-**影响**：迁移在真实数据库上的可执行性未被验证。用户取得预签名 URL 后不调用 complete，DB 行与 COS 对象双双永久滞留 —— 既是无界成本增长，也是未引用的用户照片长期留存的隐私暴露。
+**影响**：迁移漂移现可在 CI 阻断。剩余风险是用户取得预签名 URL 后不调用 complete，DB
+行与 COS 对象双双永久滞留 —— 既是无界成本增长，也是未引用用户照片长期留存的隐私暴露。
 
-**方案**：CI integration job 中对空库执行真实 `upgrade head`；新增 Beat 任务清理超过 TTL 的 `UPLOADING` 资产及其 COS 对象。
+**方案**：空库真实 `upgrade head` 与模型漂移检查已落地；剩余工作是新增 Beat 任务，清理
+超过 TTL 的 `UPLOADING` 资产及其 COS 对象。
 
 **验收**：`docs/16` 的 AST-002「孤儿对象检查」可取得证据。
 

@@ -60,6 +60,11 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_generation_jobs_user_status", "user_id", "status"),
         Index("ix_generation_jobs_status_created", "status", "created_at"),
+        Index(
+            "ix_generation_jobs_status_lease",
+            "status",
+            "execution_lease_expires_at",
+        ),
     )
 
     user_id: Mapped[UUID] = mapped_column(
