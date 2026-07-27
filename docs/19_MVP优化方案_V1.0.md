@@ -182,7 +182,9 @@
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
 - CI 已监听 `main`、`develop` 与 Pull Request，启动 PostgreSQL、Redis，并设置
-  `AIW_RUN_INTEGRATION_TESTS=1`；当前 23 个集成测试可实际执行。
+  `AIW_RUN_INTEGRATION_TESTS=1`；当前 23 个集成测试可实际执行。远端
+  [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 的 Backend
+  与 Miniapp Job 均已通过。
 - `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
   耗尽退款；其余 Executor 的领域内直接行为仍待补齐。
 - 四个 Celery 业务任务已有 9 个单元测试，覆盖有界退避、重试耗尽、同一执行 Token 传递、
