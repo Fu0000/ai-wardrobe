@@ -438,19 +438,21 @@ API 创建业务记录与 OutboxEvent
 
 当前实施快照（2026-07-27）：
 
-- 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已进入本地实库验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
-- `DONE`：18 项。
+- 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
+- `DONE`：19 项。
 - `IN_REVIEW`：47 项。
 - `IN_PROGRESS`：8 项。
-- `BLOCKED`：6 项，本机 Docker Runtime 已可用但 Compose 重复启动门禁尚未完成；同时
-  尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化研发评估的授权照片，
-  无法执行真实全链路与质量基线。
+- `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
+  研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
 - 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 151 个文件）、229
   个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
-  小程序 ESLint、类型检查、13 个测试、微信构建与 High 依赖漏洞门禁。
+  小程序 ESLint、类型检查、41 个测试、微信构建与 High 依赖漏洞门禁。
   其中 23 个 PostgreSQL/Redis 集成测试已纳入 CI。
+- Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 23 个集成
+  测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
+  Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、AIInvocation、带令牌执行租约、退避轮询、任务恢复、输入质量失败和诊断结果页。
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric。
@@ -493,7 +495,7 @@ API 创建业务记录与 OutboxEvent
 | ENG-01 | 建立 Backend 模块骨架 | 后端 | 1.5d | W1 | PM-01 | 模块与三层边界落地，健康检查可用 | DONE |
 | ENG-02 | 建立小程序工程骨架 | 前端 | 1.5d | W1 | PM-02 | Vue 3、TS strict、Pinia、基础路由可运行 | DONE |
 | ENG-03 | 建立配置与 Secret 管理 | 后端/DevOps | 1d | W1 | ENG-01 | 本地、Staging、Production 配置隔离 | DONE |
-| INF-01 | 本地 Docker 开发环境 | DevOps/后端 | 1.5d | W1 | ENG-01 | PostgreSQL、Redis 可重复启动 | BLOCKED |
+| INF-01 | 本地 Docker 开发环境 | DevOps/后端 | 1.5d | W1 | ENG-01 | PostgreSQL、Redis 可重复启动 | DONE |
 | INF-02 | Staging 云资源和网络 | DevOps | 2d | W1 | ENG-03 | API、DB、Redis、COS 连通且最小权限 | NOT_STARTED |
 | INF-03 | CI Pipeline | DevOps | 1.5d | W1 | ENG-01、ENG-02 | PR 自动执行 Test、Lint、Type Check、Build | IN_REVIEW |
 | INF-04 | OpenTelemetry、TraceID 和 CLS | DevOps/后端 | 2d | W1～W2 | INF-02 | API、Worker、Dispatcher 可按 TraceID 查询 | IN_REVIEW |
