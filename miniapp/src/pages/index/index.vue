@@ -6,9 +6,11 @@ import { storeToRefs } from "pinia";
 import { type Occasion } from "@/services/diagnoses";
 import { useAssetStore } from "@/stores/assets";
 import { useDiagnosisStore } from "@/stores/diagnoses";
+import { useJobStore } from "@/stores/jobs";
 
 const assets = useAssetStore();
 const diagnoses = useDiagnosisStore();
+const jobs = useJobStore();
 const {
   errorMessage: assetErrorMessage,
   image,
@@ -22,6 +24,7 @@ const {
   recentDiagnosisId,
   submitting,
 } = storeToRefs(diagnoses);
+const { hasPendingJobs } = storeToRefs(jobs);
 const selectedOccasion = ref<Occasion | null>(null);
 
 const occasionOptions: { value: Occasion; label: string; hint: string }[] = [
@@ -123,6 +126,7 @@ const startDiagnosis = async () => {
 };
 
 onShow(() => {
+  void jobs.refresh();
   if (recentDiagnosisId.value) {
     void diagnoses.refresh(recentDiagnosisId.value);
   }
@@ -144,7 +148,7 @@ onShow(() => {
           <text>我的</text>
         </button>
         <button class="task-link" aria-label="打开任务中心" @click="openTasks">
-          <text class="task-link__dot" />
+          <text v-if="hasPendingJobs" class="task-link__dot" />
           <text>任务</text>
         </button>
       </view>

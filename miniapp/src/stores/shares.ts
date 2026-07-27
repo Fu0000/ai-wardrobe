@@ -5,6 +5,7 @@ import {
   createShare,
   getShare,
   recordShareContinue,
+  recordShareInvocation,
   submitVote,
   type AttributionSource,
   type Share,
@@ -140,7 +141,10 @@ export const useShareStore = defineStore("shares", {
         this.submitting = false;
       }
     },
-    async refresh(sceneCode?: string): Promise<Share | null> {
+    async refresh(
+      sceneCode?: string,
+      attributionSource?: AttributionSource,
+    ): Promise<Share | null> {
       const target = sceneCode ?? this.activeSceneCode;
       if (!target || this.refreshing) {
         return this.current;
@@ -156,7 +160,11 @@ export const useShareStore = defineStore("shares", {
       this.errorCode = null;
       this.errorMessage = null;
       try {
-        const share = await getShare(target, auth.accessToken);
+        const share = await getShare(
+          target,
+          auth.accessToken,
+          attributionSource,
+        );
         this.accept(share);
         return share;
       } catch (error) {
@@ -208,6 +216,25 @@ export const useShareStore = defineStore("shares", {
         await recordShareContinue(sceneCode, auth.accessToken);
       } catch {
         // Attribution is non-blocking; never trap a user on the shared landing page.
+      }
+    },
+    async recordInvocation(
+      sceneCode: string,
+      attributionSource: Exclude<AttributionSource, "PREVIEW">,
+    ): Promise<void> {
+      const auth = useAuthStore();
+      await auth.authenticate();
+      if (!auth.accessToken) {
+        return;
+      }
+      try {
+        await recordShareInvocation(
+          sceneCode,
+          attributionSource,
+          auth.accessToken,
+        );
+      } catch {
+        // 分享菜单必须立即返回；埋点失败不能阻止微信完成分享。
       }
     },
     accept(share: Share) {

@@ -154,6 +154,7 @@ class GrowthApplicationService:
         *,
         scene_code: str,
         viewer_user_id: UUID,
+        attribution_source: str | None = None,
     ) -> ShareDetails:
         view = await self._growth.get_scene(scene_code=scene_code)
         if view is None:
@@ -175,7 +176,11 @@ class GrowthApplicationService:
                 entity_type="ShareRecord",
                 entity_id=view.share.id,
                 dedupe_key=f"{view.share.id}:{fingerprint}",
-                properties={"attribution_source": view.share.attribution_source or "UNKNOWN"},
+                properties={
+                    "attribution_source": (
+                        attribution_source or view.share.attribution_source or "UNKNOWN"
+                    )
+                },
             )
         return ShareDetails(
             view=view,
@@ -229,6 +234,36 @@ class GrowthApplicationService:
             tally=await self._growth.vote_tally(share_id=view.share.id),
             choice=choice,
             reused=reused,
+        )
+
+    async def record_share_invocation(
+        self,
+        *,
+        scene_code: str,
+        user_id: UUID,
+        attribution_source: str,
+    ) -> bool:
+        view = await self._growth.get_scene(scene_code=scene_code)
+        if (
+            view is None
+            or view.share.status != ShareStatus.ACTIVE
+            or view.asset is None
+            or (view.share.expires_at is not None and view.share.expires_at <= datetime.now(UTC))
+        ):
+            raise GrowthServiceError("SHARE_NOT_ACTIVE")
+        fingerprint = vote_fingerprint(
+            self._settings,
+            share_id=view.share.id,
+            user_id=user_id,
+        )
+        return await self._growth.record_event(
+            event_id=uuid4(),
+            user_id=user_id,
+            event_name="share.wechat.invoked",
+            entity_type="ShareRecord",
+            entity_id=view.share.id,
+            dedupe_key=f"{view.share.id}:{fingerprint}:{attribution_source}",
+            properties={"attribution_source": attribution_source},
         )
 
     async def record_continue(

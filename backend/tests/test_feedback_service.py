@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -43,9 +44,22 @@ class FakeFeedbackRepository:
         self,
         *,
         user_id: UUID,
+        cursor_created_at: datetime | None,
+        cursor_id: UUID | None,
         limit: int,
     ) -> list[BetaFeedback]:
-        return [item for item in self.feedback if item.user_id == user_id][:limit]
+        items = sorted(
+            (item for item in self.feedback if item.user_id == user_id),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+        if cursor_created_at is not None and cursor_id is not None:
+            items = [
+                item
+                for item in items
+                if (item.created_at, item.id) < (cursor_created_at, cursor_id)
+            ]
+        return items[:limit]
 
 
 def feedback_input(
@@ -65,6 +79,23 @@ def feedback_input(
         wechat_version="9.0",
         network_type="wifi",
         trace_id="a" * 32,
+    )
+
+
+def stored_feedback(
+    *,
+    user_id: UUID,
+    created_at: datetime,
+) -> BetaFeedback:
+    return BetaFeedback(
+        id=uuid4(),
+        user_id=user_id,
+        category=FeedbackCategory.EXPERIENCE,
+        message="用于验证反馈列表游标分页的测试内容。",
+        idempotency_key=f"feedback-{uuid4().hex}",
+        request_hash="a" * 64,
+        created_at=created_at,
+        updated_at=created_at,
     )
 
 
@@ -118,6 +149,45 @@ async def test_feedback_related_job_must_belong_to_the_user() -> None:
             idempotency_key="feedback-request-1",
             feedback_input=feedback_input(related_job_id=uuid4()),
         )
+
+
+async def test_feedback_list_uses_stable_opaque_cursor_pages() -> None:
+    repository = FakeFeedbackRepository()
+    service = FeedbackApplicationService(repository)  # type: ignore[arg-type]
+    user_id = uuid4()
+    now = datetime.now(UTC)
+    repository.feedback = [
+        stored_feedback(user_id=user_id, created_at=now - timedelta(minutes=index))
+        for index in range(5)
+    ]
+    repository.feedback.append(
+        stored_feedback(user_id=uuid4(), created_at=now + timedelta(minutes=1))
+    )
+
+    first = await service.list_owned(user_id=user_id, limit=2)
+    second = await service.list_owned(
+        user_id=user_id,
+        limit=2,
+        cursor=first.next_cursor,
+    )
+    third = await service.list_owned(
+        user_id=user_id,
+        limit=2,
+        cursor=second.next_cursor,
+    )
+
+    assert [len(first.items), len(second.items), len(third.items)] == [2, 2, 1]
+    assert first.next_cursor is not None
+    assert second.next_cursor is not None
+    assert third.next_cursor is None
+    assert len({item.id for page in (first, second, third) for item in page.items}) == 5
+
+
+async def test_feedback_list_rejects_invalid_cursor() -> None:
+    service = FeedbackApplicationService(FakeFeedbackRepository())  # type: ignore[arg-type]
+
+    with pytest.raises(FeedbackServiceError, match="INVALID_FEEDBACK_CURSOR"):
+        await service.list_owned(user_id=uuid4(), cursor="not-a-valid-cursor")
 
 
 def test_feedback_message_is_normalized_and_not_blank() -> None:

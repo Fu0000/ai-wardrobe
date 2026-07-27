@@ -1,5 +1,5 @@
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,6 +13,7 @@ from app.api.dependencies import get_http_client, get_session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.rate_limit import RateLimitGuard
+from app.modules.growth.models import UserEvent
 from app.modules.identity.models import User, UserProfile, UserStatus
 from app.modules.identity.repository import IdentityRepository
 from app.modules.identity.security import (
@@ -220,6 +221,8 @@ async def update_profile(
         profile = UserProfile(user=user)
         session.add(profile)
 
+    previous_consent = profile.has_ai_processing_consent
+    previous_consent_version = profile.consent_version
     if "display_name" in payload.model_fields_set:
         profile.display_name = payload.display_name
     if "has_ai_processing_consent" in payload.model_fields_set:
@@ -227,6 +230,27 @@ async def update_profile(
         profile.consent_version = (
             payload.consent_version if profile.has_ai_processing_consent else None
         )
+        consent_changed = previous_consent != profile.has_ai_processing_consent or (
+            profile.has_ai_processing_consent
+            and previous_consent_version != profile.consent_version
+        )
+        if consent_changed:
+            granted = profile.has_ai_processing_consent
+            session.add(
+                UserEvent(
+                    id=uuid4(),
+                    user_id=user.id,
+                    event_name="consent.ai.accepted" if granted else "consent.ai.revoked",
+                    entity_type="User",
+                    entity_id=user.id,
+                    dedupe_key=f"consent:{uuid4().hex}",
+                    properties={
+                        "consent_version": (
+                            profile.consent_version if granted else previous_consent_version
+                        )
+                    },
+                )
+            )
 
     await session.flush()
     return _me_response(user)

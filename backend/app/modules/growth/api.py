@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Never
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Request, status
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,17 +29,27 @@ from app.modules.optimization.repository import OptimizationRepository
 
 router = APIRouter()
 
+AttributionSource = Literal[
+    "WECHAT_FRIEND",
+    "WECHAT_TIMELINE",
+    "PREVIEW",
+]
+WechatAttributionSource = Literal[
+    "WECHAT_FRIEND",
+    "WECHAT_TIMELINE",
+]
+SceneCodePath = Annotated[
+    str,
+    Path(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
+
 
 class CreateShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     optimization_id: UUID
     display_score: bool = False
-    attribution_source: Literal[
-        "WECHAT_FRIEND",
-        "WECHAT_TIMELINE",
-        "PREVIEW",
-    ] = "WECHAT_FRIEND"
+    attribution_source: AttributionSource = "WECHAT_FRIEND"
 
 
 class PublicChange(BaseModel):
@@ -108,6 +118,18 @@ class ContinueResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     attributed: bool
+
+
+class RecordShareInvocationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attribution_source: WechatAttributionSource
+
+
+class ShareInvocationResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    recorded: bool
 
 
 def _service(session: AsyncSession, settings: Settings) -> GrowthApplicationService:
@@ -256,13 +278,11 @@ async def create_share(
 
 @router.get("/shares/{scene_code}", response_model=ShareResponse)
 async def get_share(
-    scene_code: Annotated[
-        str,
-        Path(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
-    ],
+    scene_code: SceneCodePath,
     request: Request,
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    attribution_source: Annotated[WechatAttributionSource | None, Query()] = None,
 ) -> ShareResponse:
     try:
         details: ShareDetails = await _service(
@@ -271,6 +291,7 @@ async def get_share(
         ).get_share(
             scene_code=scene_code,
             viewer_user_id=user.id,
+            attribution_source=attribution_source,
         )
     except GrowthServiceError as error:
         _raise_service_error(error)
@@ -316,12 +337,41 @@ async def create_vote(
 
 @router.get("/votes/{scene_code}/result", response_model=ShareResponse)
 async def get_vote_result(
-    scene_code: str,
+    scene_code: SceneCodePath,
     request: Request,
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ShareResponse:
-    return await get_share(scene_code, request, user, session)
+    return await get_share(scene_code, request, user, session, None)
+
+
+@router.post(
+    "/shares/{scene_code}/invocations",
+    response_model=ShareInvocationResponse,
+)
+async def record_share_invocation(
+    scene_code: SceneCodePath,
+    payload: RecordShareInvocationRequest,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ShareInvocationResponse:
+    try:
+        recorded = await _service(
+            session,
+            request.app.state.settings,
+        ).record_share_invocation(
+            scene_code=scene_code,
+            user_id=user.id,
+            attribution_source=payload.attribution_source,
+        )
+    except GrowthServiceError as error:
+        _raise_service_error(error)
+    record_product_action(
+        action="share_invocation_recorded",
+        outcome="created" if recorded else "reused",
+    )
+    return ShareInvocationResponse(recorded=recorded)
 
 
 @router.post(
@@ -329,7 +379,7 @@ async def get_vote_result(
     response_model=ContinueResponse,
 )
 async def record_continue(
-    scene_code: str,
+    scene_code: SceneCodePath,
     request: Request,
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],

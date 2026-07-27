@@ -1,6 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,12 +49,22 @@ class FeedbackRepository:
         self,
         *,
         user_id: UUID,
+        cursor_created_at: datetime | None,
+        cursor_id: UUID | None,
         limit: int,
     ) -> list[BetaFeedback]:
+        statement = select(BetaFeedback).where(BetaFeedback.user_id == user_id)
+        if cursor_created_at is not None and cursor_id is not None:
+            statement = statement.where(
+                or_(
+                    BetaFeedback.created_at < cursor_created_at,
+                    and_(
+                        BetaFeedback.created_at == cursor_created_at,
+                        BetaFeedback.id < cursor_id,
+                    ),
+                )
+            )
         result = await self._session.execute(
-            select(BetaFeedback)
-            .where(BetaFeedback.user_id == user_id)
-            .order_by(desc(BetaFeedback.created_at), desc(BetaFeedback.id))
-            .limit(limit)
+            statement.order_by(desc(BetaFeedback.created_at), desc(BetaFeedback.id)).limit(limit)
         )
         return list(result.scalars())

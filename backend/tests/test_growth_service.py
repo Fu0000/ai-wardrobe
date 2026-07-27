@@ -83,6 +83,7 @@ class FakeGrowthRepository:
         self.shares: list[ShareRecord] = []
         self.votes: dict[tuple[UUID, str], VoteChoice] = {}
         self.event_keys: set[tuple[str, str]] = set()
+        self.events: list[dict[str, object]] = []
 
     async def create_share(
         self,
@@ -184,6 +185,14 @@ class FakeGrowthRepository:
         if key in self.event_keys:
             return False
         self.event_keys.add(key)
+        self.events.append(
+            {
+                "event_name": event_name,
+                "entity_id": entity_id,
+                "properties": properties,
+                "user_id": user_id,
+            }
+        )
         return True
 
 
@@ -383,6 +392,7 @@ async def test_share_open_and_continue_attribution_are_deduplicated() -> None:
     await service.get_share(
         scene_code=created.share.scene_code,
         viewer_user_id=viewer_id,
+        attribution_source="WECHAT_TIMELINE",
     )
     await service.get_share(
         scene_code=created.share.scene_code,
@@ -401,6 +411,49 @@ async def test_share_open_and_continue_attribution_are_deduplicated() -> None:
         "share.scene.opened",
         "growth.continue.clicked",
     }
+    opened = next(event for event in growth.events if event["event_name"] == "share.scene.opened")
+    assert opened["properties"] == {"attribution_source": "WECHAT_TIMELINE"}
+
+
+@pytest.mark.asyncio
+async def test_share_invocation_is_deduplicated_per_user_and_channel() -> None:
+    owner_id = uuid4()
+    record = optimization_record(owner_id)
+    service, growth, _ = service_fixture(record)
+    created = await service.create_share(
+        user_id=owner_id,
+        optimization_id=record.optimization.id,
+        idempotency_key="share-request-001",
+        display_score=False,
+        attribution_source="WECHAT_FRIEND",
+    )
+    created.share.status = ShareStatus.ACTIVE
+    created.share.share_asset_id = uuid4()
+
+    first = await service.record_share_invocation(
+        scene_code=created.share.scene_code,
+        user_id=owner_id,
+        attribution_source="WECHAT_TIMELINE",
+    )
+    repeated = await service.record_share_invocation(
+        scene_code=created.share.scene_code,
+        user_id=owner_id,
+        attribution_source="WECHAT_TIMELINE",
+    )
+    friend = await service.record_share_invocation(
+        scene_code=created.share.scene_code,
+        user_id=owner_id,
+        attribution_source="WECHAT_FRIEND",
+    )
+
+    assert first is True
+    assert repeated is False
+    assert friend is True
+    invoked = [event for event in growth.events if event["event_name"] == "share.wechat.invoked"]
+    assert [event["properties"] for event in invoked] == [
+        {"attribution_source": "WECHAT_TIMELINE"},
+        {"attribution_source": "WECHAT_FRIEND"},
+    ]
 
 
 def test_vote_fingerprint_is_stable_and_scoped_to_each_share() -> None:

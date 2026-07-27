@@ -74,9 +74,13 @@ export function createShare(
 export function getShare(
   sceneCode: string,
   accessToken: string,
+  attributionSource?: AttributionSource,
 ): Promise<Share> {
+  const query = attributionSource
+    ? `?attribution_source=${attributionSource}`
+    : "";
   return apiRequest<Share>({
-    path: `/api/v1/shares/${sceneCode}`,
+    path: `/api/v1/shares/${sceneCode}${query}`,
     accessToken,
   });
 }
@@ -110,6 +114,22 @@ export function recordShareContinue(
   return apiRequest<{ attributed: boolean }>({
     path: `/api/v1/shares/${sceneCode}/continue`,
     method: "POST",
+    accessToken,
+  });
+}
+
+export function recordShareInvocation(
+  sceneCode: string,
+  attributionSource: Exclude<AttributionSource, "PREVIEW">,
+  accessToken: string,
+): Promise<{ recorded: boolean }> {
+  return apiRequest<
+    { recorded: boolean },
+    { attribution_source: Exclude<AttributionSource, "PREVIEW"> }
+  >({
+    path: `/api/v1/shares/${sceneCode}/invocations`,
+    method: "POST",
+    body: { attribution_source: attributionSource },
     accessToken,
   });
 }

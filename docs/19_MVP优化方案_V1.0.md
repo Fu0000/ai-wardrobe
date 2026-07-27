@@ -226,17 +226,22 @@ Docker 实库验证曾发现 `20260726_0004` 已创建
 
 ### GATE-06 契约一致性修补
 
-以下为小改动，集中一批处理：
+状态：**本地代码与自动化验证已完成；微信真机分享行为仍归入 W5 验收。**
 
-| 项 | 证据 | 方案 |
+| 项 | 落地结果 | 验证证据 |
 |---|---|---|
-| 路径参数缺校验 | `growth/api.py:319`、`:332` 的 `scene_code` 为裸 `str`，而 `get_share`（`:258-262`）有完整 `Path` 约束；`:324` 直接函数调用不触发 FastAPI 校验 | 补齐 `min_length=16, max_length=64, pattern` |
-| 反馈列表无分页 | `feedback/api.py:169-175` 无分页参数，`service.py:121-126` 硬编码 `limit=20`，客户端无法感知截断 | 改为游标信封，本项是首个列表端点，将成为后续先例 |
-| 授权变更无审计 | `identity/api.py:213-232` 直接改写 `has_ai_processing_consent` 与 `consent_version`，无 `UserEvent` 记录 | 补写审计事件，与 GATE-01 同批 |
-| 诊断结果页反馈入口未接线 | `diagnosis/result.vue:55-57` 的 `reportIssue()` 只弹 `showToast({ title: "已记录反馈入口需求" })`，把内部待办文案暴露给用户；feedback 全链路已存在但唯一入口在 `profile/index.vue:86` | 接入已有 feedback 服务或跳转反馈页 |
-| 分享链路断裂 | `share/index.vue` 自身无 `onShareAppMessage`，访客无法二次转发；全仓库无 `onShareTimeline`，`WECHAT_TIMELINE` 归因源永不产生 | 补落地页转发与朋友圈分享 |
-| 首页假指示器 | `pages/index/index.vue:147` 的 `task-link__dot` 无 `v-if`，且该类名在整个样式段无对应规则，是无效空节点 | 接入 `useJobStore` 做条件渲染，或删除 |
-| 死代码 | `stores/app.ts` 的 `completeWelcome` 无调用方，`hasSeenWelcome` 无读取方，读写两端均未接线 | 接线或删除 |
+| 路径参数缺校验 | 抽取统一 `SceneCodePath`，分享读取、投票结果、分享触发和 Continue 四条路径均限制 16～64 位安全字符 | OpenAPI 回归逐条断言 `minLength`、`maxLength` 与 `pattern` |
+| 反馈列表无分页 | `GET /me/feedback` 改为 `{items,next_cursor}`；游标用版本化 Base64URL 封装 `created_at + id`，按用户做稳定键集分页，`limit` 限制 1～50 | 单元测试覆盖多页、无重复和坏游标；真实 PostgreSQL 测试覆盖排序及跨用户隔离 |
+| 授权变更无审计 | 仅在授权布尔值或已接受版本真实变化时，同事务写入 `consent.ai.accepted` / `consent.ai.revoked`；不记录姓名等自由文本 | 测试覆盖同意、撤回、姓名变更与同版本重复提交 |
+| 诊断结果页反馈入口未接线 | “这份建议不准确”跳转现有反馈页，并透传来源页及关联 Diagnosis Job | 纯函数测试锁定 URL 编码与上下文参数 |
+| 分享链路断裂 | 分享确认页和落地页均接入好友转发与朋友圈；链接携带受限渠道，Open 事件按链接做首触达归因；新增幂等 `share.wechat.invoked` 记录 | 服务测试覆盖渠道归因和用户/渠道去重；小程序测试锁定好友与朋友圈链接 |
+| 首页假指示器 | 红点只在 `useJobStore.hasPendingJobs` 为真时显示，首页恢复时刷新任务 | 既有 Job Store 测试覆盖恢复任务与终态消除 |
+| 死代码 | 删除无读方的 `stores/app.ts` 及启动接线 | 全仓库引用扫描为零；小程序类型检查和构建通过 |
+
+门禁结果：后端 Ruff、严格 Mypy、Alembic 模型漂移检查通过；后端 210 个单元/
+契约测试与 24 个 PostgreSQL/Redis 集成测试通过；小程序 ESLint、类型检查、46 个
+测试与微信构建通过。朋友圈菜单与好友二次转发仍需在微信开发者工具和真机按
+`docs/16` 的 Growth 用例留存证据。
 
 ## 六、P2 优化项（架构债）
 

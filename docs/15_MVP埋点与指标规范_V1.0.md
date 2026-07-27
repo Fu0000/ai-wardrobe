@@ -87,6 +87,7 @@ AI 调用额外包含：
 |:---|:---|:---|
 | `auth.wechat.succeeded` | 登录完成 | `is_new_user` |
 | `consent.ai.accepted` | 用户同意 AI 图片处理 | `consent_version` |
+| `consent.ai.revoked` | 用户撤回 AI 图片处理授权 | `consent_version` |
 | `asset.upload.started` | 获取 Ticket 后开始直传 | `asset_id`, `size_bucket` |
 | `asset.upload.interrupted` | 上传因网络中断 | `reason`, `progress_bucket` |
 | `asset.upload.completed` | Complete API 成功 | `asset_id`, `latency_ms` |
@@ -98,7 +99,7 @@ AI 调用额外包含：
 | `optimization.result.completed` | Critic 通过 | `job_id`, `critic_attempts` |
 | `optimization.before_after.viewed` | 对比页首次展示 | `optimization_id` |
 | `share.asset.created` | Share Asset 可用 | `share_id`, `latency_ms` |
-| `share.wechat.invoked` | 用户触发微信分享 | `share_id` |
+| `share.wechat.invoked` | 用户触发微信分享 | `share_id`, `attribution_source` |
 | `share.scene.opened` | 好友打开分享 | `share_id`, `attribution_source` |
 | `vote.choice.submitted` | 投票成功 | `share_id`, `choice` |
 | `growth.continue.clicked` | 好友继续体验 | `share_id` |

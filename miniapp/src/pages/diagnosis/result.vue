@@ -3,6 +3,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import { feedbackPageUrl } from "@/lib/navigation";
 import { type Occasion } from "@/services/diagnoses";
 import { useDiagnosisStore } from "@/stores/diagnoses";
 import { useOptimizationStore } from "@/stores/optimizations";
@@ -53,7 +54,12 @@ const requestOptimization = async () => {
 };
 
 const reportIssue = () => {
-  uni.showToast({ title: "已记录反馈入口需求", icon: "none" });
+  uni.navigateTo({
+    url: feedbackPageUrl(
+      "pages/diagnosis/result",
+      current.value?.job_id,
+    ),
+  });
 };
 
 onLoad((query) => {

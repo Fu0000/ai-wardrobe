@@ -1,6 +1,8 @@
+import base64
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from app.modules.feedback.models import BetaFeedback, FeedbackCategory
@@ -49,6 +51,49 @@ class FeedbackInput:
 class CreatedFeedback:
     feedback: BetaFeedback
     reused: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackPage:
+    items: list[BetaFeedback]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _FeedbackCursor:
+    created_at: datetime
+    feedback_id: UUID
+
+
+def _encode_cursor(feedback: BetaFeedback) -> str:
+    payload = json.dumps(
+        {
+            "created_at": feedback.created_at.isoformat(),
+            "id": str(feedback.id),
+            "version": 1,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def _decode_cursor(value: str) -> _FeedbackCursor:
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        decoded = base64.b64decode(padded, altchars=b"-_", validate=True)
+        payload = json.loads(decoded)
+        if not isinstance(payload, dict) or payload.get("version") != 1:
+            raise ValueError
+        if set(payload) != {"created_at", "id", "version"}:
+            raise ValueError
+        created_at = datetime.fromisoformat(payload["created_at"])
+        if created_at.tzinfo is None:
+            raise ValueError
+        feedback_id = UUID(payload["id"])
+    except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise FeedbackServiceError("INVALID_FEEDBACK_CURSOR") from error
+    return _FeedbackCursor(created_at=created_at, feedback_id=feedback_id)
 
 
 class FeedbackApplicationService:
@@ -123,5 +168,18 @@ class FeedbackApplicationService:
         *,
         user_id: UUID,
         limit: int = 20,
-    ) -> list[BetaFeedback]:
-        return await self._repository.list_owned(user_id=user_id, limit=limit)
+        cursor: str | None = None,
+    ) -> FeedbackPage:
+        decoded = _decode_cursor(cursor) if cursor is not None else None
+        feedback = await self._repository.list_owned(
+            user_id=user_id,
+            cursor_created_at=decoded.created_at if decoded else None,
+            cursor_id=decoded.feedback_id if decoded else None,
+            limit=limit + 1,
+        )
+        has_more = len(feedback) > limit
+        items = feedback[:limit]
+        return FeedbackPage(
+            items=items,
+            next_cursor=_encode_cursor(items[-1]) if has_more and items else None,
+        )

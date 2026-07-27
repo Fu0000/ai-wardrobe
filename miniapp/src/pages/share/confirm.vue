@@ -3,6 +3,7 @@ import {
   onHide,
   onLoad,
   onShareAppMessage,
+  onShareTimeline,
   onShow,
   onUnload,
 } from "@dcloudio/uni-app";
@@ -10,6 +11,10 @@ import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
 import { nextJobPollDelay } from "@/lib/job-progress";
+import {
+  shareLandingPath,
+  shareLandingQuery,
+} from "@/lib/navigation";
 import { useOptimizationStore } from "@/stores/optimizations";
 import { useShareStore } from "@/stores/shares";
 
@@ -76,7 +81,7 @@ const create = async (forceNew = false) => {
     const result = await shares.create(
       optimizationId,
       displayScore.value,
-      "WECHAT_FRIEND",
+      "PREVIEW",
       forceNew,
     );
     sceneCode = result.scene_code;
@@ -109,9 +114,28 @@ onShareAppMessage(() => {
       path: "/pages/index/index",
     };
   }
+  void shares.recordInvocation(share.value.scene_code, "WECHAT_FRIEND");
   return {
     title: "我只改了必要的部分，你更喜欢 Before 还是 After？",
-    path: `/pages/share/index?scene=${encodeURIComponent(share.value.scene_code)}`,
+    path: shareLandingPath(share.value.scene_code, "WECHAT_FRIEND"),
+    imageUrl: share.value.card_url,
+  };
+});
+
+onShareTimeline(() => {
+  if (!isActive.value || !share.value?.card_url) {
+    return {
+      title: "AI Wardrobe · Minimal Change",
+      query: "",
+    };
+  }
+  void shares.recordInvocation(share.value.scene_code, "WECHAT_TIMELINE");
+  return {
+    title: "我只改了必要的部分，你更喜欢 Before 还是 After？",
+    query: shareLandingQuery(
+      share.value.scene_code,
+      "WECHAT_TIMELINE",
+    ),
     imageUrl: share.value.card_url,
   };
 });

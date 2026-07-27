@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Never
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,6 +80,13 @@ class FeedbackResponse(BaseModel):
     reused: bool = False
 
 
+class FeedbackPageResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[FeedbackResponse]
+    next_cursor: str | None
+
+
 def _service(session: AsyncSession) -> FeedbackApplicationService:
     return FeedbackApplicationService(FeedbackRepository(session))
 
@@ -87,12 +94,14 @@ def _service(session: AsyncSession) -> FeedbackApplicationService:
 def _raise_service_error(error: FeedbackServiceError) -> Never:
     status_by_code = {
         "INVALID_IDEMPOTENCY_KEY": 400,
+        "INVALID_FEEDBACK_CURSOR": 400,
         "IDEMPOTENCY_KEY_REUSED": 409,
         "RELATED_JOB_NOT_FOUND": 404,
         "FEEDBACK_CREATE_CONFLICT": 409,
     }
     message_by_code = {
         "INVALID_IDEMPOTENCY_KEY": "反馈请求标识无效。",
+        "INVALID_FEEDBACK_CURSOR": "反馈列表游标无效，请重新加载。",
         "IDEMPOTENCY_KEY_REUSED": "该请求标识已用于其他反馈，请重新提交。",
         "RELATED_JOB_NOT_FOUND": "关联任务不存在。",
         "FEEDBACK_CREATE_CONFLICT": "反馈正在提交，请稍后重试。",
@@ -166,10 +175,22 @@ async def create_feedback(
     return response
 
 
-@router.get("/me/feedback", response_model=list[FeedbackResponse])
+@router.get("/me/feedback", response_model=FeedbackPageResponse)
 async def list_feedback(
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> list[FeedbackResponse]:
-    feedback = await _service(session).list_owned(user_id=user.id)
-    return [_response(item) for item in feedback]
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+) -> FeedbackPageResponse:
+    try:
+        page = await _service(session).list_owned(
+            user_id=user.id,
+            limit=limit,
+            cursor=cursor,
+        )
+    except FeedbackServiceError as error:
+        _raise_service_error(error)
+    return FeedbackPageResponse(
+        items=[_response(item) for item in page.items],
+        next_cursor=page.next_cursor,
+    )

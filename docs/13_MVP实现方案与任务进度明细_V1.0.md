@@ -445,11 +445,11 @@ API 创建业务记录与 OutboxEvent
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 151 个文件）、229
+- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 152 个文件）、234
   个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
-  小程序 ESLint、类型检查、41 个测试、微信构建与 High 依赖漏洞门禁。
-  其中 23 个 PostgreSQL/Redis 集成测试已纳入 CI。
+  小程序 ESLint、类型检查、46 个测试、微信构建与 High 依赖漏洞门禁。
+  其中 24 个 PostgreSQL/Redis 集成测试已纳入 CI。
 - Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 23 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
@@ -460,7 +460,9 @@ API 创建业务记录与 OutboxEvent
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric。
 - W4 待验收：真实 COS/OpenAI 图片编辑与 Critic 联调、50+ 授权 Before/After 样本、双人盲评、Critic First-pass、P90 和单位成本基线、微信真机保存图片。
-- W5 Growth 代码证据：独立 Share Derivative、EXIF 清理、AI 编辑标识、分享确认页、SceneCode、好友落地页、HMAC 防重复投票、可改票不重复计数、好友侧任务信息隔离，以及 Open/Vote/Continue 去重归因事件。
+- W5 Growth 代码证据：独立 Share Derivative、EXIF 清理、AI 编辑标识、分享确认页、
+  SceneCode、好友落地页与二次转发、好友/朋友圈渠道链接、HMAC 防重复投票、可改票
+  不重复计数、好友侧任务信息隔离，以及 Share Invoked/Open/Vote/Continue 去重归因事件。
 - W5 Growth 待验收：真实 COS 分享卡片、微信好友分享和打开、分享可见 P90、投票并发、低端安卓真机，以及归因漏斗查询。
 - W6 Privacy/Hardening 代码证据：账号与单图异步 DeletionJob、原图到诊断/优化/分享派生图的闭包清理、COS/DB 两阶段重试、删除竞态稳定检查、账号删除后的本地已保存照片和业务状态清理、依赖感知 Readiness、1 MiB JSON Body Limit、CORS 与安全响应头。
 - W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager 和七条告警规则。
@@ -477,7 +479,10 @@ API 创建业务记录与 OutboxEvent
 - W6 QA/治理证据：Bug 分级、34 项核心验收用例、三类微信真机矩阵、Release Gate、Go/No-Go 决策规则、发布观察和回滚清单已形成独立可签署文档。
 - W6 Recovery/Canary 代码证据：基于 libpq Service 的校验和逻辑备份、隔离空库单事务恢复、RPO/RTO/行数/关系不变量报告；AI 用户稳定分桶、创建时 Policy Snapshot、Worker 按快照执行、0/10/50/100% Staging 审批工作流和回滚阈值 Runbook。
 - W6 Performance 代码证据：k6 2.1 API 读流量阶梯、真实 AI 成本/授权数据双重确认、每授权 Asset 单次 Diagnosis 并发与终态轮询、成功率/P90/P95/5xx 阈值、停止条件和标准报告模板。
-- W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、Trace/页面/设备最小化上下文、幂等防重、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意仍待产品侧落实。
+- W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、
+  Trace/页面/设备最小化上下文、幂等防重、版本化游标与用户隔离分页、诊断结果直达
+  反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意
+  仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
 - W6 待验收：真实 COS 删除与 PostgreSQL 事务回归、OTLP Collector/Dashboard/告警路由、备份恢复、Canary/回滚、性能与安全测试、微信真机，以及 Go/No-Go 签署。
 

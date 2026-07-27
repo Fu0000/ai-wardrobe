@@ -65,9 +65,11 @@ PATCH /api/v1/display-slots/{id}
 
 ## 十二、分享
 POST /api/v1/shares
-GET /api/v1/shares/{sceneCode}
+GET /api/v1/shares/{sceneCode}?attribution_source=WECHAT_FRIEND|WECHAT_TIMELINE
+POST /api/v1/shares/{sceneCode}/invocations
+POST /api/v1/shares/{sceneCode}/continue
 POST /api/v1/votes
-GET /api/v1/votes/{targetId}/result
+GET /api/v1/votes/{sceneCode}/result
 
 ## 十三、Commerce
 POST /api/v1/purchase-intelligence
@@ -81,16 +83,22 @@ GET /api/v1/me/deletion-status
 DELETE /api/v1/me/wardrobe
 DELETE /api/v1/me/photos/{id}
 
-## 十五、外部集成原则
+## 十五、封闭测试反馈
+POST /api/v1/feedback
+GET /api/v1/me/feedback?limit={1..50}&cursor={opaqueCursor}
+
+反馈列表使用 `{ items, next_cursor }` 游标信封；游标不透明，客户端不得解析或拼接。
+
+## 十六、外部集成原则
 微信：登录、分享、图片；剪贴板仅主动操作或用户明确 Opt-in。
 COS：直传、Signed URL、私有资产、图片派生。
 AI：统一 AI Gateway。
 商品数据：公开元数据、授权 API、合法第三方服务、截图降级；不把反爬对抗作为核心路线。
 
-## 十六、幂等
+## 十七、幂等
 Diagnosis、Optimization、Try-On、Ingestion、Outfit、Purchase Intelligence 必须支持 Idempotency-Key。
 
-## 十七、Rate Limiting
+## 十八、Rate Limiting
 三层限流：IP Layer、User Layer、Costly Action Layer。
 初始配置（P0 Target，可调）：
 - 普通 API：120 req/min/user
@@ -100,7 +108,7 @@ Diagnosis、Optimization、Try-On、Ingestion、Outfit、Purchase Intelligence �
 Rate Limit 防攻击，Quota 防成本，两者是独立系统。
 实现：Redis Token Bucket，返回 429 Too Many Requests + Retry-After Header。
 
-## 十八、请求体限制
+## 十九、请求体限制
 - JSON Body：≤ 1MB
 - Share Text：≤ 20KB
 - 单图 Upload Ticket：默认 ≤ 20MB
@@ -109,7 +117,7 @@ Rate Limit 防攻击，Quota 防成本，两者是独立系统。
 - 图片永远不进入 JSON API，通过 COS Upload Ticket 直传
 - 服务端必须校验 MIME Type、Magic Number、Image Dimensions，不能只相信客户端文件扩展名
 
-## 十九、Ownership Guard
+## 二十、Ownership Guard
 所有资源操作端点必须校验 resource.user_id == current_user.id。
 采用 Scoped Repository：查询时直接 WHERE id = ? AND user_id = ?，不存在"先查出来再判断"遗漏。
 OwnershipGuard 作为第二层保护。

@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import {
+  onLoad,
+  onShareAppMessage,
+  onShareTimeline,
+  onShow,
+} from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import {
+  parseWechatAttributionSource,
+  shareLandingPath,
+  shareLandingQuery,
+  type WechatAttributionSource,
+} from "@/lib/navigation";
 import { type VoteChoice } from "@/services/shares";
 import { useShareStore } from "@/stores/shares";
 
 const shares = useShareStore();
 const { current, errorMessage, refreshing, voting } = storeToRefs(shares);
 let sceneCode: string | null = null;
+let attributionSource: WechatAttributionSource | null = null;
 
 const share = computed(() =>
   current.value?.scene_code === sceneCode ? current.value : null,
@@ -19,7 +31,7 @@ const voteTotal = computed(
 
 const refresh = () => {
   if (sceneCode) {
-    void shares.refresh(sceneCode);
+    void shares.refresh(sceneCode, attributionSource ?? undefined);
   }
 };
 
@@ -41,8 +53,42 @@ const continueExperience = async () => {
 
 onLoad((query) => {
   sceneCode = typeof query?.scene === "string" ? query.scene : null;
+  attributionSource = parseWechatAttributionSource(query?.source);
 });
 onShow(refresh);
+
+onShareAppMessage(() => {
+  if (!share.value?.card_url) {
+    return {
+      title: "AI Wardrobe · Minimal Change",
+      path: "/pages/index/index",
+    };
+  }
+  void shares.recordInvocation(share.value.scene_code, "WECHAT_FRIEND");
+  return {
+    title: "这套穿搭只改了必要部分，你更喜欢 Before 还是 After？",
+    path: shareLandingPath(share.value.scene_code, "WECHAT_FRIEND"),
+    imageUrl: share.value.card_url,
+  };
+});
+
+onShareTimeline(() => {
+  if (!share.value?.card_url) {
+    return {
+      title: "AI Wardrobe · Minimal Change",
+      query: "",
+    };
+  }
+  void shares.recordInvocation(share.value.scene_code, "WECHAT_TIMELINE");
+  return {
+    title: "这套穿搭只改了必要部分，你更喜欢 Before 还是 After？",
+    query: shareLandingQuery(
+      share.value.scene_code,
+      "WECHAT_TIMELINE",
+    ),
+    imageUrl: share.value.card_url,
+  };
+});
 </script>
 
 <template>
