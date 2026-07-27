@@ -180,22 +180,26 @@
 
 **证据**：
 
-- 无 `conftest.py`（全仓库确认缺失）。
-- `tests/integration/test_infrastructure.py` 已存在但默认 `skip`，需 `AIW_RUN_INTEGRATION_TESTS=1` 触发，CI 未设置该变量。
-- 四个 Executor 零测试（`grep -rln "Executor" backend/tests/` 返回空）。
-- Celery tasks 零测试；`test_quota.py` 仅 19 行 2 个测试，只覆盖 `period_key` 字符串拼接，`QuotaRepository.reserve/commit/release` 真实实现零覆盖。
-- 无 401 / 认证拒绝的端点级测试。
-- 小程序零页面测试、零 services 测试。
+- `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
+- CI 已启动 PostgreSQL、Redis，并设置 `AIW_RUN_INTEGRATION_TESTS=1`；当前 20 个集成
+  测试可实际执行。
+- `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
+  耗尽退款；其余 Executor 的领域内直接行为仍待补齐。
+- 四个 Celery 业务任务已有 9 个单元测试，覆盖有界退避、重试耗尽、同一执行 Token 传递、
+  late ack、Worker 丢失重投和队列隔离配置。
+- `QuotaRepository.reserve/commit/release` 已有 12 个真实实现测试；账号删除闭包、过期任务
+  回收与端点级 401 拒绝也已覆盖。
+- 剩余缺口是小程序页面与 services 组件测试。
 
-**影响**：未覆盖的恰好是最容易在并发下损坏状态、且直接管钱的三块代码 —— Executor 的租约与 Fencing、Celery 的重试耗尽退款、Quota 的预留结算。
+**影响**：后端直接管额度的主路径已有防回归证据；剩余风险集中在 Optimization、Share、
+Deletion Executor 的领域内状态转换，以及小程序页面交互回归。
 
 **方案**：
 
-1. 新增 `conftest.py`，提供可复用的 DB Session 与事务回滚 Fixture。这是解锁后续所有项的前置。
-2. CI 增加 integration job，起 PostgreSQL 与 Redis 服务容器并设置 `AIW_RUN_INTEGRATION_TESTS=1`。
-3. 按 FIX-01、FIX-02、GATE-04 的验收补齐 Executor、Quota、purge 三组测试。
-4. 补端点级 401 / 403 断言，特别是 `authenticated_user` 与 `current_user` 的差异必须被测试锁定。
-5. 小程序引入 `@vue/test-utils` 与 `@pinia/testing`（当前 `vitest.config.ts` 为 `environment: "node"`，不具备组件测试能力）。
+1. DB Fixture、CI integration job、Quota、purge、回收、401 与 Celery 重试测试已落地。
+2. 继续覆盖 Optimization、Share 与 Deletion Executor 的领域直接行为。
+3. 小程序引入 `@vue/test-utils` 与 `@pinia/testing`（当前 `vitest.config.ts` 为
+   `environment: "node"`，不具备组件测试能力）。
 
 **验收**：CI 中集成测试实际执行而非 skip；上述四类关键路径均有覆盖。
 
