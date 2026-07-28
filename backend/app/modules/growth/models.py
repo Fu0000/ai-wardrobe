@@ -1,8 +1,18 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -100,12 +110,14 @@ class VoteRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class UserEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "user_events"
     __table_args__ = (
+        CheckConstraint("event_version >= 1", name="event_version_positive"),
         UniqueConstraint(
             "event_name",
             "dedupe_key",
             name="uq_user_events_name_dedupe",
         ),
         Index("ix_user_events_name_created", "event_name", "created_at"),
+        Index("ix_user_events_name_occurred", "event_name", "occurred_at"),
         Index("ix_user_events_entity", "entity_type", "entity_id"),
         Index("ix_user_events_user_created", "user_id", "created_at"),
     )
@@ -114,6 +126,51 @@ class UserEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"),
     )
     event_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("now()"),
+    )
+    environment: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="unavailable",
+        server_default="unavailable",
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        default="unavailable",
+        server_default="unavailable",
+    )
+    user_id_hash: Mapped[str | None] = mapped_column(String(64))
+    session_id: Mapped[str | None] = mapped_column(String(64))
+    client_version: Mapped[str | None] = mapped_column(String(32))
+    platform: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="server",
+        server_default="server",
+    )
+    app_channel: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="server",
+        server_default="server",
+    )
     entity_type: Mapped[str] = mapped_column(String(80), nullable=False)
     entity_id: Mapped[UUID] = mapped_column(nullable=False)
     dedupe_key: Mapped[str] = mapped_column(String(160), nullable=False)

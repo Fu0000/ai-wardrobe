@@ -25,6 +25,7 @@ from app.modules.identity.security import AccessTokenService
 PROTECTED_ENDPOINTS = [
     ("GET", "/api/v1/me"),
     ("PATCH", "/api/v1/me/profile"),
+    ("POST", "/api/v1/client-events"),
     ("GET", "/api/v1/me/deletion-status"),
     ("GET", f"/api/v1/jobs/{uuid4()}"),
     ("GET", f"/api/v1/style-diagnoses/{uuid4()}"),

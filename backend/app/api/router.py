@@ -12,6 +12,7 @@ from app.core.readiness import ReadinessProbe
 from app.core.telemetry import record_dependency_readiness
 from app.modules.assets.api import router as assets_router
 from app.modules.diagnosis.api import router as diagnosis_router
+from app.modules.events.api import router as events_router
 from app.modules.feedback.api import router as feedback_router
 from app.modules.governance.deletion_api import router as deletion_router
 from app.modules.growth.api import router as growth_router
@@ -25,6 +26,7 @@ api_router.include_router(identity_router, tags=["identity"])
 api_router.include_router(assets_router, tags=["assets"])
 api_router.include_router(diagnosis_router, tags=["diagnosis"])
 api_router.include_router(optimization_router, tags=["optimization"])
+api_router.include_router(events_router, tags=["events"])
 api_router.include_router(growth_router, tags=["growth"])
 api_router.include_router(deletion_router, tags=["governance"])
 api_router.include_router(feedback_router, tags=["feedback"])
