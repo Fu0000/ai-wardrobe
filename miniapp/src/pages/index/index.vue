@@ -3,6 +3,9 @@ import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
+import PrimaryAction from "@/components/PrimaryAction.vue";
+import PrivacyNote from "@/components/PrivacyNote.vue";
+import ProgressTrack from "@/components/ProgressTrack.vue";
 import { type Occasion } from "@/services/diagnoses";
 import { useAssetStore } from "@/stores/assets";
 import { useDiagnosisStore } from "@/stores/diagnoses";
@@ -220,12 +223,13 @@ onShow(() => {
             <text>{{ phaseLabel }}</text>
             <text>{{ progress }}%</text>
           </view>
-          <view class="upload-status__track">
-            <view
-              class="upload-status__fill"
-              :style="{ width: `${progress}%` }"
-            />
-          </view>
+          <ProgressTrack
+            :value="progress"
+            :label="`照片上传进度 ${progress}%`"
+            size="compact"
+            tone="accent"
+            spacing="compact"
+          />
           <text v-if="assetErrorMessage" class="upload-status__error">
             {{ assetErrorMessage }}
           </text>
@@ -284,19 +288,14 @@ onShow(() => {
           {{ diagnosisErrorMessage }}
         </text>
 
-        <button
-          class="primary-action"
+        <PrimaryAction
+          :label="actionLabel"
           :disabled="isUploading || submitting"
-          @click="startDiagnosis"
-        >
-          <text>{{ actionLabel }}</text>
-          <text class="primary-action__arrow">↗</text>
-        </button>
+          spacing="tight"
+          @action="startDiagnosis"
+        />
 
-        <view class="privacy-note">
-          <text class="privacy-note__mark">私</text>
-          <text>照片默认仅你可见，可随时删除</text>
-        </view>
+        <PrivacyNote message="照片默认仅你可见，可随时删除" />
       </section>
 
       <section class="promise-strip">
@@ -633,21 +632,6 @@ onShow(() => {
     font-size: 21rpx;
   }
 
-  &__track {
-    height: 8rpx;
-    margin-top: 16rpx;
-    overflow: hidden;
-    border-radius: 999rpx;
-    background: rgba($color-ink, 0.1);
-  }
-
-  &__fill {
-    height: 100%;
-    border-radius: inherit;
-    background: $color-vermilion;
-    transition: width 240ms ease;
-  }
-
   &__error {
     display: block;
     margin-top: 14rpx;
@@ -764,55 +748,6 @@ onShow(() => {
   &--quiet {
     border-color: rgba($color-ink, 0.14);
     color: $color-muted;
-  }
-}
-
-.primary-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 104rpx;
-  margin-top: 24rpx;
-  padding: 0 34rpx;
-  border-radius: 999rpx;
-  background: $color-ink;
-  color: $color-white;
-  font-size: 28rpx;
-  font-weight: 700;
-  line-height: 104rpx;
-
-  &[disabled] {
-    opacity: 0.58;
-  }
-
-  &__arrow {
-    color: $color-vermilion;
-    font-family: serif;
-    font-size: 42rpx;
-  }
-}
-
-.privacy-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10rpx;
-  margin-top: 22rpx;
-  color: $color-muted;
-  font-size: 20rpx;
-
-  &__mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34rpx;
-    height: 34rpx;
-    border: 1rpx solid rgba($color-sage-deep, 0.4);
-    border-radius: 50%;
-    color: $color-sage-deep;
-    font-family: "Songti SC", serif;
-    font-size: 18rpx;
   }
 }
 

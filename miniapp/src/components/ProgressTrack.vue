@@ -2,8 +2,8 @@
 import { computed } from "vue";
 
 type ProgressSize = "compact" | "standard" | "prominent";
-type ProgressTone = "calm" | "contrast";
-type ProgressSpacing = "none" | "normal" | "loose";
+type ProgressTone = "calm" | "contrast" | "accent";
+type ProgressSpacing = "none" | "compact" | "normal" | "loose";
 
 const props = withDefaults(
   defineProps<{
@@ -71,6 +71,10 @@ const normalizedValue = computed(() =>
     margin-top: 28rpx;
   }
 
+  &--spacing-compact {
+    margin-top: 16rpx;
+  }
+
   &--spacing-loose {
     margin-top: 32rpx;
   }
@@ -87,6 +91,14 @@ const normalizedValue = computed(() =>
 
   &--contrast &__fill {
     background: linear-gradient(90deg, $color-sage-deep, $color-vermilion);
+  }
+
+  &--accent &__fill {
+    background: $color-vermilion;
+  }
+
+  &--accent {
+    background: rgba($color-ink, 0.1);
   }
 }
 </style>

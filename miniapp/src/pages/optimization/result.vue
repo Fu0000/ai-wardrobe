@@ -3,6 +3,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
+import PrivacyNote from "@/components/PrivacyNote.vue";
 import StateCard from "@/components/StateCard.vue";
 import { useOptimizationStore } from "@/stores/optimizations";
 
@@ -226,9 +227,12 @@ onShow(refresh);
         <button class="result-actions__save" @click="saveAfter">保存 After</button>
         <button class="result-actions__share" @click="openSharePreview">生成分享卡片</button>
       </view>
-      <text class="privacy-copy">
-        当前图片仍为私有结果；分享时将生成不含私有访问地址的独立资产。
-      </text>
+      <PrivacyNote
+        message="当前图片仍为私有结果；分享时将生成不含私有访问地址的独立资产。"
+        :show-mark="false"
+        tone="dark"
+        spacing="compact"
+      />
     </main>
   </view>
 </template>
@@ -483,12 +487,4 @@ onShow(refresh);
   }
 }
 
-.privacy-copy {
-  display: block;
-  margin-top: 20rpx;
-  color: rgba($color-white, 0.52);
-  font-size: 18rpx;
-  line-height: 1.6;
-  text-align: center;
-}
 </style>

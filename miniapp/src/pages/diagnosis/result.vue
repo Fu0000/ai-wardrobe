@@ -3,6 +3,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import PrimaryAction from "@/components/PrimaryAction.vue";
 import StateCard from "@/components/StateCard.vue";
 import { feedbackPageUrl } from "@/lib/navigation";
 import { type Occasion } from "@/services/diagnoses";
@@ -175,16 +176,17 @@ onShow(refresh);
         </view>
       </section>
 
-      <button
-        class="primary-action"
+      <PrimaryAction
+        :label="
+          optimizationSubmitting
+            ? '正在创建优化任务'
+            : '看看优化后是什么样'
+        "
         :disabled="optimizationSubmitting"
-        @click="requestOptimization"
-      >
-        <text>{{
-          optimizationSubmitting ? "正在创建优化任务" : "看看优化后是什么样"
-        }}</text>
-        <text class="primary-action__arrow">↗</text>
-      </button>
+        tone="accent"
+        spacing="loose"
+        @action="requestOptimization"
+      />
       <text v-if="optimizationError" class="optimization-error">{{
         optimizationError
       }}</text>
@@ -435,27 +437,6 @@ onShow(refresh);
     margin-top: 10rpx;
     color: $color-sage-deep;
     font-size: 19rpx;
-  }
-}
-
-.primary-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 104rpx;
-  margin-top: 32rpx;
-  padding: 0 34rpx;
-  border-radius: 999rpx;
-  background: $color-vermilion;
-  color: $color-white;
-  font-size: 27rpx;
-  font-weight: 700;
-  line-height: 104rpx;
-
-  &__arrow {
-    font-family: serif;
-    font-size: 40rpx;
   }
 }
 

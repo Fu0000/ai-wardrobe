@@ -3,6 +3,8 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
+import PrimaryAction from "@/components/PrimaryAction.vue";
+import PrivacyNote from "@/components/PrivacyNote.vue";
 import ProgressTrack from "@/components/ProgressTrack.vue";
 import StateCard from "@/components/StateCard.vue";
 
@@ -25,6 +27,53 @@ describe("ProgressTrack", () => {
     expect(wrapper.get(".progress-track__fill").attributes("style")).toContain(
       "width: 100%",
     );
+  });
+
+  it("supports the single-accent upload treatment", () => {
+    const wrapper = mount(ProgressTrack, {
+      props: {
+        value: 36,
+        label: "照片上传进度",
+        tone: "accent",
+        spacing: "compact",
+      },
+    });
+
+    expect(wrapper.classes()).toContain("progress-track--accent");
+    expect(wrapper.classes()).toContain("progress-track--spacing-compact");
+  });
+});
+
+describe("PrimaryAction", () => {
+  it("preserves visual variants and emits its semantic action", async () => {
+    const wrapper = mount(PrimaryAction, {
+      props: {
+        label: "看看优化后是什么样",
+        tone: "accent",
+        spacing: "loose",
+      },
+    });
+
+    expect(wrapper.classes()).toContain("primary-action--accent");
+    expect(wrapper.classes()).toContain("primary-action--spacing-loose");
+    await wrapper.trigger("click");
+    expect(wrapper.emitted("action")).toHaveLength(1);
+  });
+});
+
+describe("PrivacyNote", () => {
+  it("can render quiet dark copy without the private mark", () => {
+    const wrapper = mount(PrivacyNote, {
+      props: {
+        message: "当前图片仍为私有结果。",
+        showMark: false,
+        tone: "dark",
+      },
+    });
+
+    expect(wrapper.classes()).toContain("privacy-note--dark");
+    expect(wrapper.text()).toContain("当前图片仍为私有结果。");
+    expect(wrapper.find(".privacy-note__mark").exists()).toBe(false);
   });
 });
 
