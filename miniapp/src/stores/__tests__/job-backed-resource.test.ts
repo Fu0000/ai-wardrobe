@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createJobBackedResourceStore } from "@/stores/job-backed-resource";
+import { createJobBackedResourceStore } from "@/stores/shared/job-backed-resource";
 import { useJobStore } from "@/stores/jobs";
 
 interface Resource {

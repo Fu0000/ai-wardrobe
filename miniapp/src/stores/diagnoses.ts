@@ -8,7 +8,7 @@ import {
   type Occasion,
 } from "@/services/diagnoses";
 import { useAuthStore } from "@/stores/auth";
-import { createJobBackedResourceStore } from "@/stores/job-backed-resource";
+import { createJobBackedResourceStore } from "@/stores/shared/job-backed-resource";
 
 const STORAGE_KEY = "aiw:diagnoses:v1";
 
