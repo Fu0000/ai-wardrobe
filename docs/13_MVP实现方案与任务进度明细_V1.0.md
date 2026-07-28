@@ -464,8 +464,8 @@ API 创建业务记录与 OutboxEvent
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI run 30339243334](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339243334)
-  在 `develop@8d4af16` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30339862467](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339862467)
+  在 `develop@4944b0b` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
@@ -488,6 +488,9 @@ API 创建业务记录与 OutboxEvent
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
   71 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
   Agent 执行入口。
+- W6 文档治理证据：00～08 文档文件名与 V1.1 正文已统一；P0 队列、模块路径、资源归属
+  语义和 INF-04 能力边界已按代码事实校正；自动门禁验证 80 个唯一 WBS 任务与
+  20/46/8/5/1 状态汇总一致，并在 CI 安装依赖前执行。
 - W6 Security/CI 代码证据：应用层显式 Trusted Proxy CIDR、从右向左解析
   `X-Forwarded-For`、容器关闭 Uvicorn 全局 Proxy Header 信任、生产环境拒绝
   全地址段、已知本地默认密钥和非 HTTPS 外部 Provider，并预校验 Fernet Key

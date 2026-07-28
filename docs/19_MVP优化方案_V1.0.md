@@ -330,16 +330,23 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 
 ### ARCH-05 文档一致性
 
-| 问题 | 现状 |
-|---|---|
-| 文件名与正文版本不符 | 前 9 篇文件名为 `V1.0`、正文标题为 `V1.1` |
-| 任务数不符 | `docs/13` 自报 80 项，表格实际 57 项，差额 23 项无对应行 |
-| 队列名失同步 | 文档为 `background` / `governance`，代码为 `media_generation` / `maintenance` |
-| 抽象不存在 | `docs/13` 第 4.2 节声明的 `OwnershipGuard`、`ScopedRepository` 全仓库零命中，实际为约 25 处手写过滤 |
-| 任务名含未实现内容 | `INF-04` 名称含腾讯云 CLS，无任何集成代码 |
-| 模块路径不符 | 文档写 `app/identity/`，实际为 `app/modules/identity/` |
+状态：**已完成。**
 
-统一命名前，按 `AGENTS.md` 第 2 节以正文标题与章节内容为准。
+| 问题 | 落地结果 |
+|---|---|
+| 文件名与正文版本不符 | 正文为 V1.1 的 00～08 文档已统一重命名为 `_V1.1.md`，`AGENTS.md` 与 Agent 指引引用同步；后续要求文件名和标题同时升级 |
+| 任务数不符 | 复核证明旧结论是审计误报：WBS 实有 80 个唯一任务，状态为 DONE 20、IN_REVIEW 46、IN_PROGRESS 8、BLOCKED 5、NOT_STARTED 1，总和正好为 80，未删除或虚构任务 |
+| 队列名失同步 | P0 文档统一为 `ai_fast`、`image_generation`、`media_generation`、`maintenance`；`ingestion` 明确推迟到 P0.5 |
+| 抽象不存在 | 不再把 `OwnershipGuard` / `ScopedRepository` 当作已实现类名，统一描述代码真实执行的查询范围与关联归属双层校验 |
+| 任务名含未实现内容 | INF-04 改为 OpenTelemetry、TraceID 与结构化日志；托管日志后端及腾讯云 CLS 候选明确留待 INF-02 / Staging 真实验收 |
+| 模块路径不符 | P0 模块树与 Agent 指引统一为真实的 `app/modules/*`，并补充 `api`、`core`、`database`、`evaluation`、`worker` 平台目录 |
+
+`scripts/check-docs.sh` 已强制校验编号文档文件名/标题版本、WBS ID 唯一性、任务与状态
+汇总、P0 队列、资源归属术语、INF-04 名称和核心文档引用；同时接入 `make docs-check`、
+`make lint` 和 GitHub CI。脚本只依赖 Bash 与系统基础工具，并在最小 PATH 和 Ubuntu
+Runner 上通过。远端
+[CI run 30339862467](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339862467)
+在 `develop@4944b0b` 上完成，Backend 与 Miniapp Job 均为 `success`。
 
 ## 七、实施批次
 
@@ -365,8 +372,8 @@ FIX-01、FIX-06 与 GATE-04 之间存在一条隐含主线：三者都指向「�
 - `docs/15` 第八节的埋点验收对每个 MVP 功能成立。
 - CI 中集成测试实际执行而非 skip。
 
-P2 条目不阻断封测；ARCH-01 至 ARCH-04 已完成，剩余架构债按封测期间的真实回归与维护
-成本继续排期。
+P2 条目不阻断封测；ARCH-01 至 ARCH-05 已全部完成。封测仍受真实 Staging、COS、
+微信/OpenAI、授权样本、性能质量数据和 Go/No-Go 签署等 P0/P1 外部门禁约束。
 
 ## 九、明确不做
 
