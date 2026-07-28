@@ -223,9 +223,9 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
 - CI 已监听 `main`、`develop` 与 Pull Request，启动 PostgreSQL、Redis，并设置
-  `AIW_RUN_INTEGRATION_TESTS=1`；当前 36 个集成测试可实际执行。远端
-  [CI run 30349155533](https://github.com/Fu0000/ai-wardrobe/actions/runs/30349155533)
-  已在 `develop@f6a44dc` 实际通过 Backend 36 个集成测试和 Miniapp 73 个测试。
+  `AIW_RUN_INTEGRATION_TESTS=1`；当前 42 个集成测试可实际执行。远端
+  [CI run 30350191465](https://github.com/Fu0000/ai-wardrobe/actions/runs/30350191465)
+  已在 `develop@a031018` 实际通过 Backend 42 个集成测试和 Miniapp 73 个测试。
 - `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
   耗尽退款；`OptimizationExecutor` 覆盖成功幂等事件和失败退款，`ShareAssetExecutor`
   覆盖派生资产/事件事务完成、幂等和失败 Token Fencing，`DeletionExecutor` 覆盖账号及
@@ -234,7 +234,9 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
   late ack、Worker 丢失重投和队列隔离配置。
 - `QuotaRepository.reserve/commit/release` 已有 12 个真实实现测试；账号删除闭包、过期任务
   回收与端点级 401 拒绝也已覆盖。
-- 36 个 PostgreSQL/Redis 集成测试已在本地容器全量实际执行并通过。
+- 42 个 PostgreSQL/Redis 集成测试已在本地容器全量实际执行并通过；新增 6 个真实 API
+  矩阵用例验证外来 Asset/Job/Diagnosis/Optimization 与随机不存在资源返回同一 404，
+  外来写引用不产生 Job/Deletion/Feedback 副作用，Owner 正向访问与反馈列表隔离仍可用。
 - 小程序已使用 `@vue/test-utils`、Happy DOM 与真实 Pinia 挂载反馈、账号删除和任务中心
   三个高风险页面，覆盖反馈最小化上下文、双重删除确认与三类任务恢复路由；services
   契约测试覆盖 Asset、Diagnosis、Optimization、Job、Profile、Deletion、Feedback、
@@ -252,7 +254,7 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
    （使用既有 `@vue/test-utils`、测试文件级 Happy DOM 和真实 Pinia 完成，无需增加只为
    包装 Pinia 的测试依赖）
 
-**验收**：本地与远端门禁均满足，CI 已实际执行 36 个集成测试及 73 个小程序测试。
+**验收**：本地与远端门禁均满足，CI 已实际执行 42 个集成测试及 73 个小程序测试。
 
 ### GATE-05 迁移与孤儿资产
 

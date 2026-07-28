@@ -449,23 +449,23 @@ API 创建业务记录与 OutboxEvent
 当前实施快照（2026-07-28）：
 
 - 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
-- `DONE`：21 项。
-- `IN_REVIEW`：45 项。
+- `DONE`：23 项。
+- `IN_REVIEW`：43 项。
 - `IN_PROGRESS`：8 项。
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy、36 个 PostgreSQL/Redis 集成测试全量实际执行、
+- 已验证：后端 Ruff、严格 Mypy、42 个 PostgreSQL/Redis 集成测试全量实际执行、
   十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
   小程序 ESLint、类型检查、73 个测试、微信构建与 High 依赖漏洞门禁。
-  其中 36 个 PostgreSQL/Redis 集成测试已纳入 CI。
-- Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 36 个集成
+  其中 42 个 PostgreSQL/Redis 集成测试已纳入 CI。
+- Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 42 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI run 30349155533](https://github.com/Fu0000/ai-wardrobe/actions/runs/30349155533)
-  在 `develop@f6a44dc` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30350191465](https://github.com/Fu0000/ai-wardrobe/actions/runs/30350191465)
+  在 `develop@a031018` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
@@ -490,7 +490,7 @@ API 创建业务记录与 OutboxEvent
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
 - W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
-  71 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
+  78 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
   Agent 执行入口。
 - W6 文档治理证据：00～08 文档文件名与 V1.1 正文已统一；P0 队列、模块路径、资源归属
   语义和 INF-04 能力边界已按代码事实校正；自动门禁验证 80 个唯一 WBS 任务与
@@ -502,6 +502,9 @@ API 创建业务记录与 OutboxEvent
   Bucket 并发原子性、Asset/Job/Diagnosis/Optimization/Share 跨用户隔离及
   污染关联安全降级、删除闭包、COS 签名方法与 TTL 执行验证；结构化日志
   统一清除 Token、身份标识、私有对象引用、带查询 URL 和图片 Data URL；
+  真实 PostgreSQL API 矩阵进一步验证外来资源与随机不存在资源返回相同 404，
+  外来 Asset/Job 写引用不会产生 Job、Deletion 或 Feedback 副作用，Owner 正向访问和
+  列表隔离保持可用；
   Python/小程序依赖漏洞执行强制门禁；全部第三方
   GitHub Actions 固定完整 Commit SHA，并由 Dependabot 周期更新。
 - W6 QA/治理证据：Bug 分级、34 项核心验收用例、三类微信真机矩阵、Release Gate、Go/No-Go 决策规则、发布观察和回滚清单已形成独立可签署文档。
@@ -518,8 +521,8 @@ API 创建业务记录与 OutboxEvent
   仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
-  含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、安全测试、微信真机，
-  以及 Go/No-Go 签署。
+  含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
+  过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。
 
 ### 6.1 产品、设计与项目治理
 
@@ -553,8 +556,8 @@ API 创建业务记录与 OutboxEvent
 | AUTH-01 | 微信登录 Code Exchange | 后端/前端 | 2d | W2 | INF-02、ENG-02 | 登录成功、失败和过期处理完整 | IN_REVIEW |
 | AUTH-02 | Internal User ID 与 Identity 映射 | 后端 | 1d | W2 | DB-01、AUTH-01 | 微信身份与内部用户解耦 | IN_REVIEW |
 | AUTH-03 | `GET/PATCH /me` 与资料页 | 后端/前端 | 1.5d | W2 | AUTH-02 | 用户资料可读写并校验 Schema | DONE |
-| SEC-01 | 资源范围查询与关联归属校验 | 后端 | 2d | W2 | DB-01、AUTH-02 | 所有 MVP 用户资源端点执行查询范围与关联一致性双层校验 | IN_REVIEW |
-| SEC-02 | 跨用户隔离测试 | QA/后端 | 1d | W2、W5 | SEC-01 | 资产、诊断、优化、分享私有资源不可越权 | IN_REVIEW |
+| SEC-01 | 资源范围查询与关联归属校验 | 后端 | 2d | W2 | DB-01、AUTH-02 | 所有 MVP 用户资源端点执行查询范围与关联一致性双层校验 | DONE |
+| SEC-02 | 跨用户隔离测试 | QA/后端 | 1d | W2、W5 | SEC-01 | 资产、诊断、优化、分享私有资源不可越权 | DONE |
 
 ### 6.4 资产与上传
 
