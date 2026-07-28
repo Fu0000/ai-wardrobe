@@ -87,6 +87,7 @@ unset AIW_SMOKE_ACCESS_TOKEN
 make lint
 make typecheck
 make structure-check
+make docs-check
 make test
 make security-audit
 make build
@@ -99,6 +100,9 @@ Makefile 只负责提供稳定命令名，实际执行统一进入 `scripts/*.sh
 `make structure-check` 保证运行时代码、测试、脚本、基础设施与 Eval 的每个目录不超过
 8 个直接文件。按编号维护的 `docs/` 和 Alembic 线性迁移目录属于有序注册表，不参与
 该限制。
+
+`make docs-check` 校验编号文档版本、WBS 任务/状态汇总、P0 队列和关键架构术语；
+该检查与结构检查都在 CI 安装依赖前运行。
 
 供应链扫描对未批准的 High/Critical 漏洞失败；临时例外必须登记在
 `docs/18_供应链安全例外登记_V1.0.md`，包含影响边界、补偿控制、Owner
