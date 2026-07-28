@@ -449,8 +449,8 @@ API 创建业务记录与 OutboxEvent
 当前实施快照（2026-07-28）：
 
 - 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
-- `DONE`：20 项。
-- `IN_REVIEW`：46 项。
+- `DONE`：21 项。
+- `IN_REVIEW`：45 项。
 - `IN_PROGRESS`：8 项。
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
@@ -458,7 +458,7 @@ API 创建业务记录与 OutboxEvent
 - 已验证：后端 Ruff、严格 Mypy、36 个 PostgreSQL/Redis 集成测试全量实际执行、
   十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
-  小程序 ESLint、类型检查、67 个测试、微信构建与 High 依赖漏洞门禁。
+  小程序 ESLint、类型检查、73 个测试、微信构建与 High 依赖漏洞门禁。
   其中 36 个 PostgreSQL/Redis 集成测试已纳入 CI。
 - Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 36 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
@@ -636,7 +636,7 @@ API 创建业务记录与 OutboxEvent
 | GOV-02 | 账号删除请求和状态 | 后端/前端 | 2d | W5 | GOV-01、AUTH-02 | 用户可发起、查询并获得结果 | IN_REVIEW |
 | OBS-01 | 系统、Job、AI 和产品 Dashboard | DevOps/后端 | 2d | W5 | INF-04、JOB-02、PM-03 | 核心指标可查询和分解 | IN_REVIEW |
 | OBS-02 | 关键告警 | DevOps | 1.5d | W5 | OBS-01、EVT-03 | 5xx、DB、Redis、Provider、Queue、Deletion 可告警 | IN_PROGRESS |
-| TST-01 | API Contract 和集成测试 | QA/后端 | 3d | W3～W5 | 各 API | 核心契约和事务边界覆盖 | IN_REVIEW |
+| TST-01 | API Contract 和集成测试 | QA/后端 | 3d | W3～W5 | 各 API | 核心契约和事务边界覆盖 | DONE |
 | TST-02 | 小程序核心 E2E | QA/前端 | 2d | W5 | DIA-05、OPT-06、GRW-05 | 主路径和三类失败路径自动或稳定手测 | IN_REVIEW |
 | TST-03 | 性能与容量测试 | QA/后端/DevOps | 2d | W5 | DIA-03、OPT-03、OBS-01 | 并发、队列积压、P95 报告完成 | IN_PROGRESS |
 | TST-04 | Security 与 Privacy 测试 | QA/后端 | 2d | W5 | SEC-01、GOV-02 | 越权、URL 过期、删除和 Prompt 边界通过 | IN_REVIEW |

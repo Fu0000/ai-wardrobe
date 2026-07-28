@@ -217,6 +217,8 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
 
 ### GATE-04 测试能力补齐
 
+状态：**本地代码与自动化验证已完成；最新增量待远端 CI 复验。**
+
 **证据**：
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
@@ -232,22 +234,25 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
   late ack、Worker 丢失重投和队列隔离配置。
 - `QuotaRepository.reserve/commit/release` 已有 12 个真实实现测试；账号删除闭包、过期任务
   回收与端点级 401 拒绝也已覆盖。
-- 36 个 PostgreSQL/Redis 集成测试已在本地容器全量实际执行并通过；剩余缺口是小程序
-  页面与其余 services 的交互测试。
+- 36 个 PostgreSQL/Redis 集成测试已在本地容器全量实际执行并通过。
+- 小程序已使用 `@vue/test-utils`、Happy DOM 与真实 Pinia 挂载反馈、账号删除和任务中心
+  三个高风险页面，覆盖反馈最小化上下文、双重删除确认与三类任务恢复路由；services
+  契约测试覆盖 Asset、Diagnosis、Optimization、Job、Profile、Deletion、Feedback、
+  Share 与 Telemetry。当前共 16 个测试文件、73 个用例。
 
-**影响**：后端四类 Executor 的关键事务、租约与额度路径已有防回归证据；剩余风险集中
-在小程序页面交互和尚未单测的 service wrapper。
+**影响**：原审计识别的后端事务和小程序页面/service 自动化缺口已关闭。微信运行时
+菜单、授权弹窗和真机渲染差异仍属于 TST-02 的 Staging/真机 E2E，不用 DOM 单测冒充。
 
 **方案**：
 
 1. DB Fixture、CI integration job、Quota、purge、回收、401 与 Celery 重试测试已落地。
 2. ~~继续覆盖 Optimization、Share 与 Deletion Executor 的领域直接行为。~~
    （已完成）
-3. 小程序引入 `@vue/test-utils` 与 `@pinia/testing`（当前 `vitest.config.ts` 为
-   `environment: "node"`，不具备组件测试能力）。
+3. ~~小程序引入组件测试能力并覆盖关键页面与 services。~~
+   （使用既有 `@vue/test-utils`、测试文件级 Happy DOM 和真实 Pinia 完成，无需增加只为
+   包装 Pinia 的测试依赖）
 
-**验收**：CI 中集成测试实际执行而非 skip；后端四类关键路径均有覆盖。GATE-04 仍待
-小程序页面与 services 测试补齐后关闭。
+**验收**：本地门禁已满足；推送后由 CI 实际执行 36 个集成测试及 73 个小程序测试。
 
 ### GATE-05 迁移与孤儿资产
 
