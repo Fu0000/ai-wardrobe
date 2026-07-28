@@ -39,6 +39,18 @@ def test_cloud_plan_workflow_is_read_only_and_ephemeral() -> None:
     assert '"$RUNNER_TEMP/aiw-terraform-plan/staging.tfplan"' in workflow
 
 
+def test_terraform_provider_lock_covers_ci_runner_platform() -> None:
+    lock_file = (REPO_ROOT / "infra" / "terraform" / "staging" / ".terraform.lock.hcl").read_text(
+        encoding="utf-8"
+    )
+
+    # Terraform verifies an unpacked provider with the platform-specific h1
+    # checksum. Keep the linux_amd64 hash used by GitHub-hosted runners in
+    # addition to the linux_arm64 hash used by Apple Silicon Docker Desktop.
+    assert '"h1:0mHRI8e7JNtgjI5e0MMPMlwt8+nSNjvtrZLVrXSgzMY="' in lock_file
+    assert '"h1:JyT7WfhGyKqHmYzkhZs7h8IBo9kvstQ4X0VtqTLe55w="' in lock_file
+
+
 def test_private_tke_workflows_require_the_vpc_runner() -> None:
     for workflow_name in ("deploy-staging.yml", "ai-canary-staging.yml"):
         workflow = (REPO_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")

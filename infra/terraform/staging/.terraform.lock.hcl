@@ -5,7 +5,9 @@ provider "registry.terraform.io/tencentcloudstack/tencentcloud" {
   version     = "1.83.11"
   constraints = "1.83.11"
   hashes = [
+    "h1:0mHRI8e7JNtgjI5e0MMPMlwt8+nSNjvtrZLVrXSgzMY=",
     "h1:JyT7WfhGyKqHmYzkhZs7h8IBo9kvstQ4X0VtqTLe55w=",
+    "h1:ioNWnCy60nQLgrt92JNFddC/9M7lCVfSYBMMUdbVtQ8=",
     "zh:064ac30190eec9ba13bb4f4f01f4d3f79f8a081da609072d881d207bbcd88bd8",
     "zh:0cb4cb14496b8d50bd6986ce5af12dc7fe85987529c07a6b8d947a0295497100",
     "zh:17bd038a93dc511bc60cd701c5e0a6fc31b1dece5dff6ee154bfac1779b07648",
