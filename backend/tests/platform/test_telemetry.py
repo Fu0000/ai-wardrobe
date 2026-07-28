@@ -18,6 +18,14 @@ class _Histogram:
         del value, attributes
 
 
+class _Gauge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, Mapping[str, object]]] = []
+
+    def set(self, value: int, attributes: Mapping[str, object]) -> None:
+        self.calls.append((value, attributes))
+
+
 def test_worker_span_records_business_outcome(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,3 +77,25 @@ def test_orphan_cleanup_metric_uses_bounded_outcomes(
         telemetry.record_orphan_upload_cleanup(outcome="asset-id", count=1)
     with pytest.raises(ValueError, match="nonnegative"):
         telemetry.record_orphan_upload_cleanup(outcome="cleaned", count=-1)
+
+
+def test_dependency_readiness_uses_bounded_names_and_numeric_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gauge = _Gauge()
+    monkeypatch.setattr(telemetry, "_dependency_readiness", gauge)
+
+    telemetry.record_dependency_readiness(
+        {
+            "database": "ok",
+            "redis": "failed",
+            "object_storage": "disabled",
+            "user-supplied": "failed",
+        }
+    )
+
+    assert gauge.calls == [
+        (1, {"aiw.dependency.name": "database"}),
+        (0, {"aiw.dependency.name": "redis"}),
+        (1, {"aiw.dependency.name": "object_storage"}),
+    ]

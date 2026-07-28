@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from time import perf_counter
 from types import TracebackType
@@ -63,6 +64,10 @@ _orphan_upload_cleanup = _meter.create_counter(
     unit="{asset}",
 )
 _product_actions = _meter.create_counter("aiw.product.actions", unit="{action}")
+_dependency_readiness = _meter.create_gauge(
+    "aiw.dependency.readiness",
+    unit="{state}",
+)
 
 _WORKER_OUTCOMES = frozenset(
     {
@@ -86,6 +91,7 @@ _PRODUCT_ACTIONS = frozenset(
         "feedback_submitted",
     }
 )
+_DEPENDENCY_NAMES = frozenset({"database", "redis", "object_storage"})
 
 
 def configure_telemetry(
@@ -218,6 +224,16 @@ def record_product_action(*, action: str, outcome: str) -> None:
             "aiw.outcome": outcome,
         },
     )
+
+
+def record_dependency_readiness(dependencies: Mapping[str, str]) -> None:
+    for name, state in dependencies.items():
+        if name not in _DEPENDENCY_NAMES:
+            continue
+        _dependency_readiness.set(
+            1 if state in {"ok", "disabled"} else 0,
+            {"aiw.dependency.name": name},
+        )
 
 
 class WorkerSpan(AbstractContextManager["WorkerSpan"]):

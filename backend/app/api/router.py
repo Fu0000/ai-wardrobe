@@ -9,6 +9,7 @@ from app.core.config import Settings
 from app.core.errors import AppError, ErrorResponse
 from app.core.rate_limit import enforce_ip_rate_limit
 from app.core.readiness import ReadinessProbe
+from app.core.telemetry import record_dependency_readiness
 from app.modules.assets.api import router as assets_router
 from app.modules.diagnosis.api import router as diagnosis_router
 from app.modules.feedback.api import router as feedback_router
@@ -85,6 +86,7 @@ async def readiness(request: Request) -> ReadinessResponse:
     settings = _settings(request)
     probe: ReadinessProbe = request.app.state.readiness_probe
     report = await probe.check()
+    record_dependency_readiness(report.dependencies)
     if not report.ready:
         raise AppError(
             code="SERVICE_NOT_READY",

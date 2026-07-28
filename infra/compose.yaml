@@ -29,6 +29,8 @@ services:
       - redis-server
       - --appendonly
       - "yes"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
       - --maxmemory-policy
       - noeviction
     ports:
@@ -43,6 +45,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1
+    restart: unless-stopped
+    profiles:
+      - observability
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/${POSTGRES_DB:-ai_wardrobe}?sslmode=disable"
+      DATA_SOURCE_USER: ${POSTGRES_USER:-ai_wardrobe}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis-exporter:
+    image: ghcr.io/oliver006/redis_exporter:v1.88.0
+    restart: unless-stopped
+    profiles:
+      - observability
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_EXPORTER_INCL_CONFIG_METRICS: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.153.0
@@ -74,6 +101,8 @@ services:
     depends_on:
       - otel-collector
       - alertmanager
+      - postgres-exporter
+      - redis-exporter
 
   alertmanager:
     image: prom/alertmanager:v0.32.1

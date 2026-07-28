@@ -1,6 +1,71 @@
 groups:
   - name: ai-wardrobe-service
     rules:
+      - alert: AIWardrobePostgreSQLUnavailable
+        expr: |
+          pg_up == 0
+          or absent(pg_up)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: PostgreSQL readiness is unavailable
+          runbook: Check exporter health, database connectivity, credentials, and the latest migration.
+
+      - alert: AIWardrobePostgreSQLConnectionsHigh
+        expr: |
+          (
+            sum(pg_stat_activity_count)
+            /
+            clamp_min(max(pg_settings_max_connections), 1)
+          ) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: PostgreSQL connection usage exceeds 80%
+          runbook: Split activity by state, find long transactions, and check application pool saturation.
+
+      - alert: AIWardrobeRedisUnavailable
+        expr: |
+          redis_up == 0
+          or absent(redis_up)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis readiness is unavailable
+          runbook: Check exporter health, Redis connectivity, credentials, and latency.
+
+      - alert: AIWardrobeRedisConnectionsHigh
+        expr: |
+          (
+            redis_connected_clients
+            /
+            clamp_min(redis_config_maxclients, 1)
+          ) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis client connection usage exceeds 80%
+          runbook: Inspect client list, application pools, blocked clients, and stale workers.
+
+      - alert: AIWardrobeRedisMemoryHigh
+        expr: |
+          (
+            redis_memory_used_bytes
+            /
+            clamp_min(redis_memory_max_bytes, 1)
+          ) > 0.80
+          and on(instance) redis_memory_max_bytes > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis memory usage exceeds 80% of configured maximum
+          runbook: Inspect key growth, queue backlog, TTL coverage, and noeviction write failures.
+
       - alert: AIWardrobeHigh5xxRate
         expr: |
           (
