@@ -9,7 +9,7 @@ EXECUTOR_PATHS = (
 
 
 def test_all_business_executors_delegate_fencing_to_shared_harness() -> None:
-    app_root = Path(__file__).parents[1] / "app"
+    app_root = Path(__file__).parents[2] / "app"
     for relative_path in EXECUTOR_PATHS:
         source = (app_root / relative_path).read_text()
         assert "JobExecutionHarness" in source

@@ -15,7 +15,7 @@ from app.modules.governance.purge_closure import (
 )
 
 _REPOSITORY_PATH = (
-    Path(__file__).resolve().parents[1] / "app/modules/governance/deletion_repository.py"
+    Path(__file__).resolve().parents[2] / "app/modules/governance/deletion_repository.py"
 )
 
 

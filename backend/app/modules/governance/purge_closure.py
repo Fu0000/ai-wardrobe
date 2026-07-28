@@ -4,7 +4,7 @@
 记忆维持是不可靠的——`beta_feedback` 表就是在新增模块时漏接进删除闭包的。
 
 本模块把「哪些表算用户数据」「哪些表按设计豁免」变成可被断言的声明，配套的
-`tests/test_deletion_closure.py` 会在新增用户数据表未接入删除闭包时直接失败。
+`tests/governance/test_deletion_closure.py` 会在新增用户数据表未接入删除闭包时直接失败。
 该守卫不依赖数据库，因此在普通 CI 中即可拦截遗漏。
 """
 

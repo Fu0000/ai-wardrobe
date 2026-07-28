@@ -1,6 +1,6 @@
 """过期任务回收的逻辑覆盖。
 
-真实 SQL 与配额结算在 tests/integration/test_stale_job_reaper.py 中验证；
+真实 SQL 与配额结算在 tests/integration/jobs/test_stale_job_reaper_db.py 中验证；
 这里聚焦不依赖数据库的分支：状态转换、配额释放的调用与豁免、宽限期计算。
 """
 

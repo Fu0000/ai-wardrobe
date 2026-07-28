@@ -1,6 +1,6 @@
 """删除闭包的数据库级验证。
 
-`tests/test_deletion_closure.py` 用静态分析保证「每张用户数据表都写进了
+`tests/governance/test_deletion_closure.py` 用静态分析保证「每张用户数据表都写进了
 purge_account」，不依赖数据库；本文件在真实 PostgreSQL 上验证「执行后确实
 零残留」，并确认清理是按用户收敛而非全表清空。两层互补，缺一不可。
 """
