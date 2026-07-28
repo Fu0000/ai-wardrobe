@@ -120,5 +120,6 @@ jobs:
           node --check infra/performance/api-read.js
           node --check infra/performance/ai-job-capacity.js
           bash -n scripts/performance/local-api-baseline.sh
+          bash -n scripts/performance/staging-ai-capacity.sh
           bash -n scripts/performance/staging-queue-recovery.sh
           bash -n scripts/security/staging-security-audit.sh

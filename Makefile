@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline staging-queue-recovery event-funnel-audit staging-smoke staging-security-audit
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline staging-ai-capacity staging-queue-recovery event-funnel-audit staging-smoke staging-security-audit
 
 install: backend-install frontend-install
 
@@ -61,6 +61,9 @@ local-alert-drill:
 
 local-api-baseline:
 	./scripts/performance/local-api-baseline.sh
+
+staging-ai-capacity:
+	./scripts/performance/staging-ai-capacity.sh
 
 staging-queue-recovery:
 	./scripts/performance/staging-queue-recovery.sh

@@ -16,6 +16,7 @@ from scripts.performance.queue_recovery_audit import (
     QueueRecoveryAuditor,
     load_dataset,
     load_state,
+    validate_capacity_stage,
     validate_staging_base_url,
     write_state,
 )
@@ -54,6 +55,8 @@ def test_dataset_requires_private_local_file_and_safe_staging_origin(
         validate_staging_base_url("http://staging.example.com")
     with pytest.raises(QueueRecoveryAuditError, match="plain HTTPS"):
         validate_staging_base_url("https://user:pass@staging.example.com")
+    with pytest.raises(QueueRecoveryAuditError, match="approved capacity stage"):
+        validate_capacity_stage(records, 10)
 
 
 def test_audit_state_is_private_and_integrity_checked(tmp_path: Path) -> None:

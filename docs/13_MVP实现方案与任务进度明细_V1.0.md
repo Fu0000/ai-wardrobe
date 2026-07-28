@@ -526,6 +526,10 @@ API 创建业务记录与 OutboxEvent
   ConfigMap/API Staging 身份和不可变镜像 SHA 三重前置检查，只暂停 `ai_fast` Worker；
   专用账号 Diagnosis、幂等重放、停机 Pending 控制、EXIT/信号自动恢复、全量终态轮询
   和 Queue Drain Time 脱敏报告已自动化，真实 Staging 执行仍待环境与授权数据。
+- W6 AI Capacity 代码证据：`make staging-ai-capacity` 固定 k6 2.1.0 镜像摘要，仅允许
+  Staging、不可变 API/Worker SHA、全部就绪副本和 10→30→50 精确阶段；成功率、
+  关联头、HTTP 失败率、P90/P95 双重硬门禁与 `0600` 脱敏报告已就绪，真实分级压测、
+  Dashboard 资源水位和成本复核仍待执行。
 - W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、
   Trace/页面/设备最小化上下文、幂等防重、版本化游标与用户隔离分页、诊断结果直达
   反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意

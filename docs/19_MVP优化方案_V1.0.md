@@ -341,6 +341,14 @@ Dashboard 资源水位和低端安卓体验后，才能将 `TST-03` 与 Performa
 MockTransport/文件安全测试覆盖脱敏成功链路、错误停机控制、私有数据集与状态完整性。
 真实 Staging 尚未执行，因此 REL-003/TST-03 状态不提前转为 `DONE`。
 
+真实 AI 容量入口也已收口为 `make staging-ai-capacity`：只接受 10、30、50 三个精确
+阶段和每条不同专用 Token 的 `0600` 数据集，固定 k6 2.1.0 镜像摘要，并核验
+Kubernetes Context、ConfigMap/API Staging 身份、API/Worker 不可变 SHA 和副本就绪。
+k6 与独立报告生成器双重判定 Diagnosis 成功率 ≥95%、关联头 100%、HTTP 失败率
+<2%、P90 <20 秒、P95 <30 秒；5xx/网络失败越界会提前中止，报告不含 Token、
+用户/Job/Asset ID、URL、图片或 Provider 响应。代码入口完成不代表 10→30→50
+真实运行、资源水位和成本已验收。
+
 ### GATE-08 Staging Security/Privacy 审计
 
 状态：**自动化入口已完成；真实 COS 执行仍受 Staging 与双账号凭据阻塞。**

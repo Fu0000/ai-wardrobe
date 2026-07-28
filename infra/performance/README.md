@@ -39,18 +39,31 @@ This suite creates one real Diagnosis per dataset row and polls it to a terminal
 ```bash
 cp infra/performance/ai-job-dataset.example.json \
   infra/performance/ai-job-dataset.local.json
+chmod 600 infra/performance/ai-job-dataset.local.json
 
-export K6_BASE_URL='https://staging.example.com'
-export K6_DATA_FILE='/absolute/path/to/infra/performance/ai-job-dataset.local.json'
-export K6_RUN_ID='staging-YYYYMMDD-HHMM'
-export K6_ENABLE_COSTLY_AI_LOAD='I_ACCEPT_REAL_AI_COST_AND_AUTHORIZED_DATA'
-k6 run \
-  --summary-export=infra/performance/results/ai-jobs-YYYYMMDD.json \
-  infra/performance/ai-job-capacity.js
-unset K6_BASE_URL K6_DATA_FILE K6_RUN_ID K6_ENABLE_COSTLY_AI_LOAD
+export STAGING_API_BASE_URL='https://staging.example.com'
+export STAGING_EXPECTED_SHA='<40-character deployed commit SHA>'
+export STAGING_KUBE_CONTEXT='<exact current staging context>'
+export AIW_QUEUE_DATA_FILE="$PWD/infra/performance/ai-job-dataset.local.json"
+export AIW_CAPACITY_STAGE='10'
+export AIW_AI_CAPACITY_CONFIRMATION='I_ACCEPT_STAGING_AI_COST_AND_ONCALL_WINDOW'
+make staging-ai-capacity
+unset STAGING_API_BASE_URL STAGING_EXPECTED_SHA STAGING_KUBE_CONTEXT
+unset AIW_QUEUE_DATA_FILE AIW_CAPACITY_STAGE AIW_AI_CAPACITY_CONFIRMATION
 ```
 
-Start with 10 authorized records. Expand to 30～50 only after verifying quotas, budget and alert routing. The Gate requires Diagnosis success ≥95%, P90 <20 seconds, P95 <30 seconds, no lost/stuck Job, no double quota charge and queue recovery after load stops.
+Every row must use a different dedicated Staging user and its own READY authorized
+Asset. The runner only accepts exact 10, 30 or 50-record stages and uses the fixed
+k6 2.1.0 image digest. Start with 10 and increase to 30, then 50 only after the
+previous report passes and quotas, budget, Dashboard and alert routing are
+reviewed. It rejects non-Staging ConfigMap/API identity, mismatched Kubernetes
+Context, mutable/wrong API or Worker images, unsafe datasets and unready replicas.
+
+The hard Gate requires Diagnosis success ≥95%, correlation headers 100%, HTTP
+failure rate <2%, P90 <20 seconds and P95 <30 seconds. The generated `0600`
+Markdown report and raw summary are stored under the ignored results directory
+without Tokens, user/Job/Asset IDs, private URLs, photos or Provider responses.
+No direct unpinned k6 invocation is accepted as release evidence.
 
 ## Required report
 

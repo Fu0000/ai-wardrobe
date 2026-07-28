@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 import httpx
 
 _CONFIRMATION = "I_ACCEPT_STAGING_WORKER_PAUSE_AND_REAL_AI_COST"
+_CAPACITY_CONFIRMATION = "I_ACCEPT_STAGING_AI_COST_AND_ONCALL_WINDOW"
 _MAX_DATASET_BYTES = 1024 * 1024
 _STATE_VERSION = 1
 _TERMINAL_STATUSES = {
@@ -190,6 +191,14 @@ def load_dataset(path: Path) -> tuple[list[DatasetRecord], str]:
             )
         )
     return records, hashlib.sha256(raw).hexdigest()
+
+
+def validate_capacity_stage(
+    dataset: list[DatasetRecord],
+    expected_size: int | None,
+) -> None:
+    if expected_size is not None and len(dataset) != expected_size:
+        raise QueueRecoveryAuditError("dataset size does not match the approved capacity stage")
 
 
 def _parse_object(response: httpx.Response, *, label: str) -> dict[str, Any]:
@@ -547,9 +556,15 @@ def _required_env(name: str) -> str:
     return value
 
 
-def _runtime_inputs() -> tuple[str, Path, str]:
-    if os.environ.get("AIW_QUEUE_RECOVERY_CONFIRMATION") != _CONFIRMATION:
-        raise QueueRecoveryAuditError("explicit Staging Worker pause confirmation is required")
+def _runtime_inputs(*, purpose: str = "queue_recovery") -> tuple[str, Path, str]:
+    if purpose == "queue_recovery":
+        confirmed = os.environ.get("AIW_QUEUE_RECOVERY_CONFIRMATION") == _CONFIRMATION
+        error_message = "explicit Staging Worker pause confirmation is required"
+    else:
+        confirmed = os.environ.get("AIW_AI_CAPACITY_CONFIRMATION") == (_CAPACITY_CONFIRMATION)
+        error_message = "explicit Staging AI cost and On-call confirmation is required"
+    if not confirmed:
+        raise QueueRecoveryAuditError(error_message)
     return (
         validate_staging_base_url(_required_env("STAGING_API_BASE_URL")),
         Path(_required_env("AIW_QUEUE_DATA_FILE")).expanduser().resolve(),
@@ -581,9 +596,10 @@ async def run_create(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def run_validate() -> dict[str, object]:
-    _, dataset_path, expected_sha = _runtime_inputs()
+def run_validate(args: argparse.Namespace) -> dict[str, object]:
+    _, dataset_path, expected_sha = _runtime_inputs(purpose=args.purpose)
     dataset, _ = load_dataset(dataset_path)
+    validate_capacity_stage(dataset, args.expected_size)
     return {
         "status": "VALIDATED",
         "application_sha": expected_sha,
@@ -633,7 +649,13 @@ def parse_args() -> argparse.Namespace:
         description="Audit Staging Worker pause, backlog retention and queue recovery.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("validate")
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--expected-size", type=int, choices=(10, 30, 50))
+    validate.add_argument(
+        "--purpose",
+        choices=("queue_recovery", "ai_capacity"),
+        default="queue_recovery",
+    )
     create = subparsers.add_parser("create")
     create.add_argument("--state", type=Path, required=True)
     create.add_argument("--settle-seconds", type=float, default=15)
@@ -656,7 +678,7 @@ def main() -> int:
     try:
         args = parse_args()
         if args.command == "validate":
-            report, passed = run_validate(), True
+            report, passed = run_validate(args), True
         elif args.command == "create":
             report, passed = asyncio.run(run_create(args)), True
         else:

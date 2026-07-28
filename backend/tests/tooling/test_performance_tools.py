@@ -7,6 +7,7 @@ import pytest
 from app.core.config import Settings
 from scripts.performance_tools import (
     PerformanceToolError,
+    build_ai_capacity_report,
     build_api_report,
     validate_local_fixture_settings,
     write_fixture_file,
@@ -73,3 +74,49 @@ def test_api_report_extracts_sanitized_gate_metrics() -> None:
     assert "P95 latency | 21.70 ms | <500 ms" in report
     assert "HTTP failure rate | 0.100% | <1%" in report
     assert "secret-token" not in report
+
+
+def test_ai_capacity_report_enforces_stage_and_release_thresholds() -> None:
+    summary = {
+        "metrics": {
+            "iterations": {"values": {"count": 10, "rate": 0.5}},
+            "http_reqs": {"values": {"count": 120, "rate": 6}},
+            "http_req_failed{scenario:authorized_ai_jobs}": {"values": {"rate": 0.01}},
+            "diagnosis_success": {"values": {"rate": 1}},
+            "correlation_headers": {"values": {"rate": 1}},
+            "diagnosis_total_latency": {
+                "values": {
+                    "med": 8_000,
+                    "p(90)": 15_000,
+                    "p(95)": 18_000,
+                }
+            },
+        }
+    }
+
+    report, passed = build_ai_capacity_report(
+        summary,
+        git_sha="a" * 40,
+        k6_image="grafana/k6:2.1.0@sha256:example",
+        k6_exit_code=0,
+        stage=10,
+        vus=10,
+        api_replicas=2,
+        worker_replicas=2,
+    )
+    wrong_stage, wrong_stage_passed = build_ai_capacity_report(
+        summary,
+        git_sha="a" * 40,
+        k6_image="grafana/k6:2.1.0@sha256:example",
+        k6_exit_code=0,
+        stage=30,
+        vus=10,
+        api_replicas=2,
+        worker_replicas=2,
+    )
+
+    assert "Conclusion: **PASS**" in report
+    assert passed is True
+    assert "Diagnosis P95 | 18000.00 ms | <30000 ms" in report
+    assert "Conclusion: **FAIL**" in wrong_stage
+    assert wrong_stage_passed is False

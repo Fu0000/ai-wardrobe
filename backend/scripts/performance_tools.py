@@ -259,6 +259,110 @@ def write_api_report(
     _atomic_text_write(output, report, mode=0o644)
 
 
+def build_ai_capacity_report(
+    summary: dict[str, Any],
+    *,
+    git_sha: str,
+    k6_image: str,
+    k6_exit_code: int,
+    stage: int,
+    vus: int,
+    api_replicas: int,
+    worker_replicas: int,
+) -> tuple[str, bool]:
+    if not 1 <= vus <= 50 or not 1 <= api_replicas <= 10 or not 1 <= worker_replicas <= 10:
+        raise PerformanceToolError("AI capacity execution metadata is outside safe bounds")
+    iterations = _metric_values(summary, "iterations")
+    requests = _metric_values(summary, "http_reqs")
+    failures = _metric_values(summary, "http_req_failed{scenario:authorized_ai_jobs}")
+    success = _metric_values(summary, "diagnosis_success")
+    correlation = _metric_values(summary, "correlation_headers")
+    latency = _metric_values(summary, "diagnosis_total_latency")
+    iteration_count = _number(iterations, "count")
+    success_rate = _number(success, "rate")
+    correlation_rate = _number(correlation, "rate")
+    failure_rate = _number(failures, "rate")
+    p90 = _number(latency, "p(90)")
+    p95 = _number(latency, "p(95)")
+    passed = (
+        k6_exit_code == 0
+        and iteration_count == stage
+        and success_rate > 0.94
+        and correlation_rate == 1
+        and failure_rate < 0.02
+        and p90 < 20_000
+        and p95 < 30_000
+    )
+
+    return (
+        "\n".join(
+            [
+                "# Staging AI capacity stage",
+                "",
+                f"- Conclusion: **{'PASS' if passed else 'FAIL'}**",
+                f"- Generated at: `{datetime.now(UTC).isoformat()}`",
+                f"- Application SHA: `{git_sha}`",
+                f"- Load generator: `{k6_image}`",
+                f"- Approved stage: `{stage}` distinct dedicated users / Jobs",
+                f"- Virtual users: `{vus}`",
+                f"- API / ai_fast replicas: `{api_replicas}` / `{worker_replicas}`",
+                f"- k6 exit code: `{k6_exit_code}`",
+                "",
+                "## Results",
+                "",
+                "| Metric | Result | Gate |",
+                "|:---|---:|:---|",
+                f"| Iterations | {iteration_count:.0f} | ={stage} |",
+                f"| HTTP requests | {_number(requests, 'count'):.0f} | informational |",
+                f"| Diagnosis success | {success_rate * 100:.3f}% | ≥95% |",
+                f"| Correlation headers | {correlation_rate * 100:.3f}% | 100% |",
+                f"| HTTP failure rate | {failure_rate * 100:.3f}% | <2% |",
+                f"| Diagnosis P90 | {p90:.2f} ms | <20000 ms |",
+                f"| Diagnosis P95 | {p95:.2f} ms | <30000 ms |",
+                "",
+                (
+                    "The report contains no access token, user identifier, "
+                    "Job/Asset ID, private URL, photo content, or Provider response."
+                ),
+                (
+                    "Pass this stage before increasing 10 → 30 → 50. Queue recovery, "
+                    "resource watermarks, database/COS/Quota reconciliation and device "
+                    "evidence remain separate release requirements."
+                ),
+                "",
+            ]
+        ),
+        passed,
+    )
+
+
+def write_ai_capacity_report(
+    summary_path: Path,
+    output: Path,
+    *,
+    git_sha: str,
+    k6_image: str,
+    k6_exit_code: int,
+    stage: int,
+    vus: int,
+    api_replicas: int,
+    worker_replicas: int,
+) -> bool:
+    summary = _load_json_object(summary_path)
+    report, passed = build_ai_capacity_report(
+        summary,
+        git_sha=git_sha,
+        k6_image=k6_image,
+        k6_exit_code=k6_exit_code,
+        stage=stage,
+        vus=vus,
+        api_replicas=api_replicas,
+        worker_replicas=worker_replicas,
+    )
+    _atomic_text_write(output, report, mode=0o600)
+    return passed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manage safe local performance fixtures.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -278,6 +382,17 @@ def parse_args() -> argparse.Namespace:
     report.add_argument("--start-rate", type=int, required=True)
     report.add_argument("--target-rate", type=int, required=True)
     report.add_argument("--duration", required=True)
+
+    ai_report = subparsers.add_parser("ai-report")
+    ai_report.add_argument("--summary", type=Path, required=True)
+    ai_report.add_argument("--output", type=Path, required=True)
+    ai_report.add_argument("--git-sha", required=True)
+    ai_report.add_argument("--k6-image", required=True)
+    ai_report.add_argument("--k6-exit-code", type=int, required=True)
+    ai_report.add_argument("--stage", type=int, choices=(10, 30, 50), required=True)
+    ai_report.add_argument("--vus", type=int, required=True)
+    ai_report.add_argument("--api-replicas", type=int, required=True)
+    ai_report.add_argument("--worker-replicas", type=int, required=True)
     return parser.parse_args()
 
 
@@ -291,7 +406,7 @@ def main() -> int:
         elif args.command == "delete":
             deleted = asyncio.run(delete_fixture(settings, args.fixture))
             print(json.dumps({"deleted": deleted, "status": "cleaned"}))
-        else:
+        elif args.command == "report":
             write_api_report(
                 args.summary,
                 args.output,
@@ -303,6 +418,21 @@ def main() -> int:
                 duration=args.duration,
             )
             print(json.dumps({"report": str(args.output), "status": "written"}))
+        else:
+            passed = write_ai_capacity_report(
+                args.summary,
+                args.output,
+                git_sha=args.git_sha,
+                k6_image=args.k6_image,
+                k6_exit_code=args.k6_exit_code,
+                stage=args.stage,
+                vus=args.vus,
+                api_replicas=args.api_replicas,
+                worker_replicas=args.worker_replicas,
+            )
+            print(json.dumps({"report": str(args.output), "status": "written"}))
+            if not passed:
+                return 1
     except PerformanceToolError as error:
         raise SystemExit(f"performance tool rejected the request: {error}") from error
     return 0

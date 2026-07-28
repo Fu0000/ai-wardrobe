@@ -151,6 +151,17 @@ make staging-queue-recovery
 并通过 EXIT/信号陷阱恢复原副本数。脱敏报告需证明停机期间任务未执行、幂等重放未
 重复建 Job、恢复后全部完成，并记录 Queue Drain Time；不得包含 Token、用户或资源 ID。
 
+真实 AI 容量按 10→30→50 专用账号逐级执行；前一阶段未通过或 Dashboard、成本、
+告警路由未确认时不得扩级。变量和私有数据集要求见 `infra/performance/README.md`：
+
+```bash
+make staging-ai-capacity
+```
+
+该入口必须固定 k6 镜像摘要并拒绝非 Staging 环境、错误 Context/镜像、非 `0600`
+数据集和未就绪副本。每级报告须满足 Diagnosis 成功率 ≥95%、关联头 100%、
+HTTP 失败率 <2%、P90 <20 秒、P95 <30 秒，且不得记录任何身份或资产数据。
+
 ## 六、发布 Gate
 
 | Gate | `GO` 标准 | 当前状态（2026-07-28） |
