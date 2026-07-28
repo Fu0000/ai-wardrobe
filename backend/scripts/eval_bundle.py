@@ -8,6 +8,17 @@ import tempfile
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
+from app.evaluation.dataset_policy import DatasetPolicyError
+from app.evaluation.diagnosis import (
+    EvaluationSample,
+    read_jsonl,
+    validate_diagnosis_release_dataset,
+)
+from app.evaluation.optimization import (
+    OptimizationEvaluationSample,
+    validate_optimization_release_dataset,
+)
+
 EXPECTED_FILES = frozenset(
     {
         "diagnosis/baseline.json",
@@ -57,7 +68,28 @@ def _extract_file(bundle: ZipFile, entry: ZipInfo, destination: Path) -> int:
     return written
 
 
-def extract_eval_bundle(archive: Path, output: Path) -> list[str]:
+def _validate_release_policy(extracted: Path) -> None:
+    try:
+        diagnosis_samples = read_jsonl(
+            extracted / "diagnosis/manifest.jsonl",
+            EvaluationSample,
+        )
+        optimization_samples = read_jsonl(
+            extracted / "optimization/manifest.jsonl",
+            OptimizationEvaluationSample,
+        )
+        validate_diagnosis_release_dataset(diagnosis_samples)
+        validate_optimization_release_dataset(optimization_samples)
+    except (DatasetPolicyError, OSError, ValueError) as error:
+        raise EvalBundleError("eval bundle release dataset policy failed") from error
+
+
+def extract_eval_bundle(
+    archive: Path,
+    output: Path,
+    *,
+    enforce_release_policy: bool = False,
+) -> list[str]:
     if output.exists() or output.is_symlink():
         raise EvalBundleError("eval bundle output directory must not already exist")
     try:
@@ -85,6 +117,8 @@ def extract_eval_bundle(archive: Path, output: Path) -> list[str]:
             corrupt_path = bundle.testzip()
             if corrupt_path is not None:
                 raise EvalBundleError("eval bundle checksum verification failed")
+        if enforce_release_policy:
+            _validate_release_policy(staging)
         staging.replace(output)
     except EvalBundleError:
         shutil.rmtree(staging)
@@ -101,13 +135,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--enforce-release-policy", action="store_true")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        extracted = extract_eval_bundle(args.archive, args.output)
+        extracted = extract_eval_bundle(
+            args.archive,
+            args.output,
+            enforce_release_policy=args.enforce_release_policy,
+        )
     except EvalBundleError as error:
         raise SystemExit(f"eval bundle rejected: {error}") from error
     print(json.dumps({"status": "PASSED", "files": extracted}, sort_keys=True))

@@ -5,14 +5,20 @@ import asyncio
 import math
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from time import perf_counter
 from typing import Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import Settings
+from app.evaluation.dataset_policy import (
+    DatasetPolicyError,
+    common_release_violations,
+    private_reference_violations,
+    tag_value,
+)
+from app.evaluation.dataset_policy import private_object_key as private_object_key
 from app.evaluation.regression import (
     DIAGNOSIS_METRICS,
     RegressionReportError,
@@ -33,6 +39,14 @@ from app.modules.diagnosis.prompt import STYLE_DIAGNOSIS_PROMPT
 from app.modules.diagnosis.schema import DiagnosisOutput, InputQuality
 
 EVALUATOR_VERSION = "style-diagnosis-evaluator-v1.0.0"
+RELEASE_OCCASIONS = frozenset({"DAILY", "SCHOOL", "WORK", "INTERVIEW", "DATE", "TRAVEL"})
+DIAGNOSIS_DIVERSITY_TAG_PREFIXES = (
+    "body_type:",
+    "skin_tone:",
+    "lighting:",
+    "camera_angle:",
+    "background_complexity:",
+)
 Occasion = Literal[
     "DAILY",
     "SCHOOL",
@@ -62,7 +76,11 @@ class EvaluationSample(BaseModel):
     split: Literal["tune", "validation", "regression"]
     asset_reference: str = Field(min_length=1)
     occasion: Occasion
-    consent_reference: str = Field(min_length=1)
+    consent_reference: str = Field(
+        min_length=8,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$",
+    )
     tags: list[str] = Field(default_factory=list)
     expected: ExpectedDiagnosis
 
@@ -110,17 +128,6 @@ class AutomatedSampleResult:
     failure_code: str | None
 
 
-def private_object_key(reference: str) -> str:
-    parsed = urlparse(reference)
-    if parsed.scheme != "cos-private" or parsed.query or parsed.fragment:
-        raise ValueError("asset reference must use cos-private:// without query data")
-    raw_key = f"{parsed.netloc}{parsed.path}".lstrip("/")
-    path = PurePosixPath(raw_key)
-    if not raw_key or path.is_absolute() or ".." in path.parts:
-        raise ValueError("asset reference contains an unsafe object key")
-    return str(path)
-
-
 def read_jsonl[T: BaseModel](path: Path, model: type[T]) -> list[T]:
     records: list[T] = []
     with path.open(encoding="utf-8") as handle:
@@ -133,6 +140,64 @@ def read_jsonl[T: BaseModel](path: Path, model: type[T]) -> list[T]:
             except ValidationError as error:
                 raise ValueError(f"invalid record at line {line_number}") from error
     return records
+
+
+def validate_diagnosis_release_dataset(
+    samples: list[EvaluationSample],
+    *,
+    release_split: str = "validation",
+) -> dict[str, object]:
+    selected = [sample for sample in samples if sample.split == release_split]
+    violations = common_release_violations(
+        domain="diagnosis",
+        sample_ids=[sample.sample_id for sample in samples],
+        dataset_versions=[sample.dataset_version for sample in samples],
+        splits=[sample.split for sample in samples],
+        consent_references=[sample.consent_reference for sample in samples],
+        tag_sets=[sample.tags for sample in samples],
+        release_split=release_split,
+    )
+    violations.extend(
+        private_reference_violations(
+            domain="diagnosis",
+            references=[sample.asset_reference for sample in samples],
+            require_unique=True,
+        )
+    )
+
+    occasion_counts = Counter(sample.occasion for sample in selected)
+    if not RELEASE_OCCASIONS.issubset(occasion_counts):
+        violations.append("diagnosis.required_occasion_coverage")
+
+    unacceptable_count = sum(not sample.expected.input_acceptable for sample in selected)
+    if unacceptable_count < 10:
+        violations.append("diagnosis.low_quality_sample_count_at_least_10")
+
+    prompt_injection_count = sum("risk:prompt_injection" in sample.tags for sample in selected)
+    if prompt_injection_count < 5:
+        violations.append("diagnosis.prompt_injection_sample_count_at_least_5")
+
+    diversity: dict[str, int] = {}
+    for prefix in DIAGNOSIS_DIVERSITY_TAG_PREFIXES:
+        values = [tag_value(sample.tags, prefix) for sample in selected]
+        dimension = prefix.removesuffix(":")
+        diversity[dimension] = len({value for value in values if value is not None})
+        if any(value is None for value in values):
+            violations.append(f"diagnosis.{dimension}_metadata_complete")
+        if diversity[dimension] < 2:
+            violations.append(f"diagnosis.{dimension}_at_least_2_values")
+
+    if violations:
+        raise DatasetPolicyError(violations)
+    return {
+        "status": "PASSED",
+        "release_split": release_split,
+        "sample_count": len(selected),
+        "occasion_counts": dict(sorted(occasion_counts.items())),
+        "low_quality_sample_count": unacceptable_count,
+        "prompt_injection_sample_count": prompt_injection_count,
+        "diversity_distinct_value_counts": diversity,
+    }
 
 
 def contract_checks(
@@ -482,6 +547,22 @@ def main() -> int:
         samples = samples[: max(0, args.max_samples)]
     if not samples:
         raise SystemExit("manifest contains no selected samples")
+    if args.enforce_release_gates:
+        try:
+            validate_diagnosis_release_dataset(samples)
+        except DatasetPolicyError as error:
+            write_report(
+                args.output,
+                {
+                    "schema_version": 1,
+                    "command_gate": {
+                        "status": "FAILED",
+                        "failures": ["RELEASE_DATASET_POLICY_FAILED"],
+                        "policy_violations": list(error.violations),
+                    },
+                },
+            )
+            return 2
     reviews = read_jsonl(args.reviews, HumanReview) if args.reviews is not None else None
     results = asyncio.run(
         run_evaluation(

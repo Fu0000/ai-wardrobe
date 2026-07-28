@@ -204,6 +204,13 @@ AI Canary 工作流代码现已在任何非零放量前下载并校验不可变�
 `production_image_model`，避免 fallback 或错误候选数据导致假通过。待办缩小为配置
 受保护环境密钥、提供真实授权 Bundle 并留存首次 Staging 运行证据。
 
+Bundle 准入已进一步失败关闭：安全解压后、Provider 调用前，机器校验两个 Validation
+数据集各 50+、诊断六场景/五类多样性元数据/10 条低质/5 条 Prompt Injection、
+Optimization 正常样本和六类 Fidelity Bad Case、私有且不重复的资产引用、单一版本、
+非占位授权引用，以及 Optimization 生产延迟/成本与未展示拒绝结果。两个 Runner 在
+Release Gate 模式重复执行同一合同，绕过 Bundle 入口也不能触发不合格数据的付费评测。
+校验失败仅落规则编号，不泄露样本、授权或对象引用。
+
 **影响**：`docs/13` 第 9.2 节 M1 Gate 的 `Diagnosis Success Rate ≥95%`、`P95 < 30s`、`Critic First-pass ≥75%` 四个数值**没有任何数据来源**，AI Quality Gate 无法脱离 `BLOCKED`。
 
 **方案**：

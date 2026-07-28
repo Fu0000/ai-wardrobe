@@ -40,6 +40,44 @@ evals/
   身份、身体、背景、姿势、未提及衣物与视觉异常 Bad Case。
 - 上线前每个质量维度人工抽样不少于 20 例。
 
+### Release Manifest 机器准入合同
+
+示例 Manifest 只用于展示结构，其中的 `example` 引用会被正式门禁主动拒绝。进入
+AI Canary 的 Bundle 必须同时满足：
+
+- 两份 Manifest 内 `sample_id` 唯一、`dataset_version` 单一，发布用
+  `validation` Split 各不少于 50 条；
+- `consent_reference` 是 8～80 位的不透明授权记录引用，不得含姓名、URL、路径、
+  联系方式或 `example/test/dummy/todo/placeholder/fake/sample` 等占位标记；
+- 所有资产只允许 `cos-private://` 引用；诊断资产与 Optimization Candidate 不得重复，
+  同一条 Optimization 的 Before/After 不得相同；
+- 每条诊断样本恰好包含一个 `body_type:*`、`skin_tone:*`、`lighting:*`、
+  `camera_angle:*`、`background_complexity:*` 标签，每个维度至少覆盖两个值；
+- 诊断集覆盖 `DAILY/SCHOOL/WORK/INTERVIEW/DATE/TRAVEL`，至少 10 条
+  `input_acceptable=false`，至少 5 条带 `risk:prompt_injection`；
+- Optimization 同时包含 PASS 与 REJECT，并至少各有一条
+  `bad_case:identity_change`、`bad_case:body_change`、
+  `bad_case:background_change`、`bad_case:pose_change`、
+  `bad_case:unmentioned_garment_change`、`bad_case:visual_artifact`；
+- Optimization Bad Case 必须标成 REJECT 并对应正确的 `failure_dimensions`，生产模型
+  版本单一，延迟与成本完整，预期拒绝结果不得曾展示给用户。
+
+CI 在安全解压后、调用 Provider 前执行相同合同；两个 Runner 在
+`--enforce-release-gates` 下会再次校验，不能通过绕过 ZIP 入口规避准入。
+
+可在受控环境预检不可变 Bundle：
+
+```bash
+cd backend
+uv run python -m scripts.eval_bundle \
+  --archive /secure/evals/ai-eval-bundle.zip \
+  --output /secure/evals/verified-bundle \
+  --enforce-release-policy
+```
+
+校验失败不会留下半解压目录，错误与报告只包含规则编号和聚合计数，不输出样本 ID、
+授权引用或对象地址。
+
 ## 必须记录的版本
 
 - `dataset_version`

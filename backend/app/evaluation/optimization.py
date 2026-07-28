@@ -12,7 +12,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.config import Settings
-from app.evaluation.diagnosis import private_object_key, read_jsonl
+from app.evaluation.dataset_policy import (
+    DatasetPolicyError,
+    common_release_violations,
+    private_object_key,
+    private_reference_violations,
+)
+from app.evaluation.diagnosis import read_jsonl
 from app.evaluation.regression import (
     OPTIMIZATION_METRICS,
     RegressionReportError,
@@ -37,6 +43,14 @@ from app.modules.optimization.schema import (
 )
 
 EVALUATOR_VERSION = "style-optimization-evaluator-v1.0.0"
+REQUIRED_OPTIMIZATION_BAD_CASES = {
+    "bad_case:identity_change": "IDENTITY",
+    "bad_case:body_change": "IDENTITY",
+    "bad_case:background_change": "BACKGROUND_AND_LIGHTING",
+    "bad_case:pose_change": "POSE_AND_COMPOSITION",
+    "bad_case:unmentioned_garment_change": "UNMENTIONED_GARMENTS",
+    "bad_case:visual_artifact": "VISUAL_ARTIFACT",
+}
 FailureDimension = Literal[
     "IDENTITY",
     "POSE_AND_COMPOSITION",
@@ -72,7 +86,11 @@ class OptimizationEvaluationSample(BaseModel):
     split: Literal["tune", "validation", "regression"]
     source_reference: str = Field(min_length=1)
     candidate_reference: str = Field(min_length=1)
-    consent_reference: str = Field(min_length=1)
+    consent_reference: str = Field(
+        min_length=8,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$",
+    )
     production_image_model: str = Field(
         min_length=1,
         max_length=160,
@@ -135,6 +153,78 @@ class OptimizationSampleResult:
     expected_dimension_recall: float | None
     automated_pass: bool
     failure_code: str | None
+
+
+def validate_optimization_release_dataset(
+    samples: list[OptimizationEvaluationSample],
+    *,
+    release_split: str = "validation",
+) -> dict[str, object]:
+    selected = [sample for sample in samples if sample.split == release_split]
+    violations = common_release_violations(
+        domain="optimization",
+        sample_ids=[sample.sample_id for sample in samples],
+        dataset_versions=[sample.dataset_version for sample in samples],
+        splits=[sample.split for sample in samples],
+        consent_references=[sample.consent_reference for sample in samples],
+        tag_sets=[sample.tags for sample in samples],
+        release_split=release_split,
+    )
+    violations.extend(
+        private_reference_violations(
+            domain="optimization.source",
+            references=[sample.source_reference for sample in samples],
+            require_unique=False,
+        )
+    )
+    violations.extend(
+        private_reference_violations(
+            domain="optimization.candidate",
+            references=[sample.candidate_reference for sample in samples],
+            require_unique=True,
+        )
+    )
+    if any(sample.source_reference == sample.candidate_reference for sample in samples):
+        violations.append("optimization.before_after_references_differ")
+
+    pass_count = sum(sample.expected.decision == "PASS" for sample in selected)
+    reject_count = len(selected) - pass_count
+    if pass_count == 0 or reject_count == 0:
+        violations.append("optimization.pass_and_reject_samples_present")
+
+    bad_case_counts: dict[str, int] = {}
+    for tag, expected_dimension in REQUIRED_OPTIMIZATION_BAD_CASES.items():
+        matching = [sample for sample in selected if tag in sample.tags]
+        bad_case_counts[tag] = len(matching)
+        if not matching:
+            violations.append(f"optimization.{tag.replace(':', '_')}_present")
+        if any(
+            sample.expected.decision != "REJECT"
+            or expected_dimension not in sample.expected.failure_dimensions
+            for sample in matching
+        ):
+            violations.append(f"optimization.{tag.replace(':', '_')}_labeled")
+
+    if any(
+        sample.production_latency_ms is None or sample.production_cost_microunits is None
+        for sample in selected
+    ):
+        violations.append("optimization.production_metrics_complete")
+    if any(sample.expected.decision == "REJECT" and sample.exposed_to_user for sample in selected):
+        violations.append("optimization.expected_rejects_not_exposed")
+    if len({sample.production_image_model for sample in selected}) != 1:
+        violations.append("optimization.single_production_image_model")
+
+    if violations:
+        raise DatasetPolicyError(violations)
+    return {
+        "status": "PASSED",
+        "release_split": release_split,
+        "sample_count": len(selected),
+        "pass_sample_count": pass_count,
+        "reject_sample_count": reject_count,
+        "bad_case_counts": dict(sorted(bad_case_counts.items())),
+    }
 
 
 def detected_failure_dimensions(output: OptimizationCriticOutput) -> set[str]:
@@ -583,6 +673,22 @@ def main() -> int:
         samples = samples[: max(0, args.max_samples)]
     if not samples:
         raise SystemExit("manifest contains no selected samples")
+    if args.enforce_release_gates:
+        try:
+            validate_optimization_release_dataset(samples)
+        except DatasetPolicyError as error:
+            write_report(
+                args.output,
+                {
+                    "schema_version": 1,
+                    "command_gate": {
+                        "status": "FAILED",
+                        "failures": ["RELEASE_DATASET_POLICY_FAILED"],
+                        "policy_violations": list(error.violations),
+                    },
+                },
+            )
+            return 2
     reviews = (
         read_jsonl(args.reviews, OptimizationHumanReview) if args.reviews is not None else None
     )

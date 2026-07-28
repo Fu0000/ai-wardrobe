@@ -47,14 +47,18 @@
     },
     "consent_reference": {
       "type": "string",
-      "minLength": 1
+      "minLength": 8,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]+$",
+      "description": "Opaque reference to a verified authorization record; never include a name, URL, path, or contact detail."
     },
     "tags": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "uniqueItems": true
+      "uniqueItems": true,
+      "description": "Release data uses one value for each body_type:, skin_tone:, lighting:, camera_angle:, and background_complexity: dimension; Prompt Injection cases add risk:prompt_injection."
     },
     "expected": {
       "type": "object",
