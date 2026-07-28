@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import math
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -14,6 +13,15 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from app.core.config import Settings
 from app.evaluation.diagnosis import private_object_key, read_jsonl
+from app.evaluation.regression import (
+    OPTIMIZATION_METRICS,
+    RegressionReportError,
+    RegressionThresholds,
+    compare_reports,
+    load_report,
+    release_gate_failures,
+    write_report,
+)
 from app.modules.ai.contracts import StructuredVisionRequest
 from app.modules.ai.gateway import AIGateway, AllProvidersFailedError
 from app.modules.ai.openai_provider import OpenAIStructuredVisionProvider
@@ -500,13 +508,57 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-samples", type=int)
     parser.add_argument("--concurrency", type=int, default=2)
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--max-quality-drop", type=float, default=0.03)
+    parser.add_argument(
+        "--max-latency-increase-percent",
+        type=float,
+        default=20.0,
+    )
+    parser.add_argument(
+        "--max-cost-increase-percent",
+        type=float,
+        default=20.0,
+    )
+    parser.add_argument("--enforce-release-gates", action="store_true")
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int:
     args = parse_args()
     if args.concurrency < 1 or args.concurrency > 8:
         raise SystemExit("--concurrency must be between 1 and 8")
+    thresholds = RegressionThresholds(
+        max_quality_drop=args.max_quality_drop,
+        max_latency_increase_percent=args.max_latency_increase_percent,
+        max_cost_increase_percent=args.max_cost_increase_percent,
+    )
+    baseline: dict[str, object] | None = None
+    baseline_sha256: str | None = None
+    baseline_equals_output = (
+        args.baseline is not None and args.baseline.resolve() == args.output.resolve()
+    )
+    try:
+        thresholds.validate()
+        if baseline_equals_output:
+            raise RegressionReportError("baseline and output paths must differ")
+        if args.baseline is not None:
+            baseline, baseline_sha256 = load_report(args.baseline)
+    except RegressionReportError as error:
+        if not baseline_equals_output:
+            write_report(
+                args.output,
+                {
+                    "schema_version": 1,
+                    "command_gate": {
+                        "status": "FAILED",
+                        "failures": ["REGRESSION_CONFIGURATION_INVALID"],
+                        "error": str(error),
+                    },
+                },
+            )
+        return 2
+
     samples = read_jsonl(args.manifest, OptimizationEvaluationSample)
     if args.split:
         samples = [sample for sample in samples if sample.split == args.split]
@@ -524,12 +576,38 @@ def main() -> None:
             concurrency=args.concurrency,
         )
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(build_report(results, reviews), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    report = build_report(results, reviews)
+    failures: list[str] = []
+    try:
+        if baseline is not None and baseline_sha256 is not None:
+            comparison = compare_reports(
+                report,
+                baseline,
+                metrics=OPTIMIZATION_METRICS,
+                thresholds=thresholds,
+                baseline_sha256=baseline_sha256,
+            )
+            report["regression_comparison"] = comparison
+            if comparison["status"] != "PASSED":
+                failures.append("REGRESSION_COMPARISON_FAILED")
+        if args.enforce_release_gates:
+            failures.extend(release_gate_failures(report))
+    except RegressionReportError as error:
+        report["command_gate"] = {
+            "status": "FAILED",
+            "failures": ["REGRESSION_CONFIGURATION_INVALID"],
+            "error": str(error),
+        }
+        write_report(args.output, report)
+        return 2
+
+    report["command_gate"] = {
+        "status": "PASSED" if not failures else "FAILED",
+        "failures": failures,
+    }
+    write_report(args.output, report)
+    return 0 if not failures else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

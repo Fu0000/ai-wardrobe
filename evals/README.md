@@ -61,7 +61,9 @@ uv run python -m app.evaluation.diagnosis \
   --reviews /secure/evals/style-diagnosis-reviews-v0.1.jsonl \
   --split validation \
   --concurrency 2 \
-  --output /secure/eval-reports/style-diagnosis-v0.1.json
+  --baseline /secure/eval-baselines/style-diagnosis-v0.1.json \
+  --enforce-release-gates \
+  --output /secure/eval-reports/style-diagnosis-v0.1-candidate.json
 ```
 
 Runner 只在内存中使用短时签名 URL；报告不会写入原图引用、签名 URL、Provider
@@ -79,8 +81,36 @@ uv run python -m app.evaluation.optimization \
   --reviews /secure/evals/style-optimization-reviews-v0.1.jsonl \
   --split validation \
   --concurrency 2 \
-  --output /secure/eval-reports/style-optimization-v0.1.json
+  --baseline /secure/eval-baselines/style-optimization-v0.1.json \
+  --enforce-release-gates \
+  --output /secure/eval-reports/style-optimization-v0.1-candidate.json
 ```
 
 Runner 会重新执行当前版本 Critic，汇总预期 Gate 命中率、失败维度召回、
 Critic First-pass、生产 P90、成本覆盖、拒绝结果误展示，以及双人评审覆盖和分歧。
+
+## 基线回归门禁
+
+首次建立基线时不传 `--baseline`，由 AI、产品和 QA 审核报告后，将其以只读方式归档到
+受控存储。候选版本必须传入该基线；`--baseline` 与 `--output` 不得指向同一文件。
+比较报告只记录基线文件的 SHA-256，不记录受控目录路径。
+
+比较仅在样本 ID 集合和 `dataset_version` 完全一致时成立，否则直接失败。默认门槛为：
+
+- 成功率、自动质量指标相对基线最多下降 3 个百分点；
+- Structured Output Schema 通过率不允许下降；
+- P95 延迟相对基线最多增加 20%；
+- 平均成本相对基线最多增加 20%。
+
+可通过 `--max-quality-drop`、`--max-latency-increase-percent` 和
+`--max-cost-increase-percent` 收紧门槛。放宽门槛必须作为发布变更接受评审，不能在
+失败后临时绕过。`--enforce-release-gates` 同时强制当前报告内所有 Release Gate 为真。
+
+进程退出码：
+
+- `0`：回归比较与启用的 Release Gate 均通过；
+- `1`：质量、延迟、成本或 Release Gate 失败；
+- `2`：基线文件、阈值或比较配置无效。
+
+无论质量门禁通过或失败，Runner 都会先原子写入候选报告，供 CI 归档与复盘；配置在
+Provider 调用前校验，避免因无效基线产生不必要成本。

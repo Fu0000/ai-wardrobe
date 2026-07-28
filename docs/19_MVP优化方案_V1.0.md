@@ -171,14 +171,24 @@
 
 ### GATE-02 Eval 数据集与回归对比
 
-**证据**：`evals/style_diagnosis/manifest.example.jsonl` 与 `evals/style_optimization/manifest.example.jsonl` 各 1 行示例。`docs/12` 要求各 50+ 样本，且诊断集需覆盖 6 类场景、含 10 张以上低质量输入与 5 张以上 Prompt Injection 样本。`backend/app/evaluation/diagnosis.py` 的 CLI 无 `--baseline` 参数，无版本间退化判定。
+**当前证据（2026-07-28）**：诊断与优化 Eval Runner 均已支持 `--baseline`、质量绝对
+降幅、P95 延迟和平均成本相对涨幅门槛，以及 `--enforce-release-gates`；固定样本 ID
+集合或 `dataset_version` 不一致时拒绝比较，Schema 通过率不允许退化。无效基线在调用
+Provider 前失败，候选质量超阈值时先原子落报告再返回非零退出码，基线仅以 SHA-256
+进入报告。相关边界和失败关闭行为已有自动测试。
+
+`evals/style_diagnosis/manifest.example.jsonl` 与
+`evals/style_optimization/manifest.example.jsonl` 仍各只有 1 行示例。`docs/12` 要求
+各 50+ 授权样本，且诊断集需覆盖 6 类场景、含 10 张以上低质量输入与 5 张以上
+Prompt Injection 样本；真实基线报告与 AI Canary 硬门禁尚待完成。
 
 **影响**：`docs/13` 第 9.2 节 M1 Gate 的 `Diagnosis Success Rate ≥95%`、`P95 < 30s`、`Critic First-pass ≥75%` 四个数值**没有任何数据来源**，AI Quality Gate 无法脱离 `BLOCKED`。
 
 **方案**：
 
 1. 立即启动授权样本采集 —— 这是唯一有外部前置周期的事项，不能排到最后。
-2. Eval Runner 增加 `--baseline` 与退化阈值判定，超阈值返回非零退出码。
+2. ~~Eval Runner 增加 `--baseline` 与退化阈值判定，超阈值返回非零退出码。~~
+   （代码完成，待授权数据实测）
 3. 将该判定接入 AI Canary 工作流，作为模型变更的硬门禁。
 
 **验收**：两个数据集达到 `docs/12` 的样本量与分布要求；基线报告归档并可被 `docs/16` 引用。
