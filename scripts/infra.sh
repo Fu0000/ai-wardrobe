@@ -7,9 +7,11 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 compose() {
   local docker_bin
   docker_bin="$(aiw_docker_bin)"
+  local docker_bin_dir
+  docker_bin_dir="$(dirname -- "${docker_bin}")"
   [[ -f "${AIW_REPO_ROOT}/.env" ]] ||
     aiw_fail "缺少 .env；请先执行 cp .env.example .env。"
-  "${docker_bin}" compose \
+  PATH="${docker_bin_dir}:${PATH}" "${docker_bin}" compose \
     --env-file "${AIW_REPO_ROOT}/.env" \
     -f "${AIW_REPO_ROOT}/infra/compose.yaml" \
     "$@"
