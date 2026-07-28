@@ -488,6 +488,10 @@ API 创建业务记录与 OutboxEvent
 - W6 Privacy/Hardening 代码证据：账号与单图异步 DeletionJob、原图到诊断/优化/分享派生图的闭包清理、COS/DB 两阶段重试、删除竞态稳定检查、账号删除后的本地已保存照片和业务状态清理、依赖感知 Readiness、1 MiB JSON Body Limit、CORS 与安全响应头。
 - W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product/依赖 Readiness 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager、PostgreSQL/Redis Exporter 和 14 条告警规则；本地演练已验证五条依赖规则、三个 Scrape Target、合成告警注入与解除，真实 On-call 外发仍待 Staging 验收。
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
+- W6 环境隔离证据：Staging 清单显式标记 `AIW_ENVIRONMENT=staging`，日志、Trace、
+  指标与产品事件不会混入 Production 口径；Staging 与 Production 共同执行非本地
+  密钥、私有 COS、Rate Limit、Trusted Proxy、Provider HTTPS 和 OpenTelemetry
+  部署安全校验。
 - W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
   79 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的

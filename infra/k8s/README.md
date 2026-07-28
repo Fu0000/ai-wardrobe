@@ -7,6 +7,12 @@ The manifests run one immutable backend image as:
 - one Celery Beat replica for Outbox dispatch scheduling;
 - a forward-only Alembic migration Job before workload rollout.
 
+The base manifest is Staging-only and sets `AIW_ENVIRONMENT=staging`, so logs,
+metrics, traces and product events cannot be mistaken for production traffic.
+Runtime safety validation applies equally to Staging and Production: strong
+non-local cryptographic keys, private COS, rate limiting, trusted proxies and
+OpenTelemetry remain mandatory.
+
 All containers run as UID/GID `10001`, drop Linux capabilities, disable privilege escalation, use a read-only root filesystem, and write temporary state only to bounded `/tmp` volumes.
 
 ## Required cluster state

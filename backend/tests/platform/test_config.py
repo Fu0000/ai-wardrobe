@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
@@ -30,6 +32,23 @@ def production_settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings.model_validate(values)
+
+
+def test_staging_applies_deployed_environment_safety_checks() -> None:
+    with pytest.raises(ValidationError, match="rate limiting must be enabled"):
+        production_settings(
+            environment="staging",
+            rate_limit_enabled=False,
+        )
+
+
+def test_staging_manifest_uses_staging_runtime_environment() -> None:
+    manifest = (Path(__file__).resolve().parents[3] / "infra/k8s/base/configmap.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "  AIW_ENVIRONMENT: staging\n" in manifest
+    assert "  AIW_ENVIRONMENT: production\n" not in manifest
 
 
 def test_production_rejects_debug_mode() -> None:

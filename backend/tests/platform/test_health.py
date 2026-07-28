@@ -36,6 +36,19 @@ async def test_liveness_returns_versioned_service_metadata() -> None:
     assert "Strict-Transport-Security" not in response.headers
 
 
+async def test_staging_responses_enable_hsts() -> None:
+    app = create_app(Settings.model_construct(environment="staging"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="https://staging.example.com",
+    ) as client:
+        response = await client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+
+
 async def test_readiness_reports_only_sanitized_dependency_states() -> None:
     app = create_app(Settings(environment="test"))
     app.state.readiness_probe = FakeReadinessProbe(

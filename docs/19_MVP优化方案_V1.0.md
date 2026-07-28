@@ -136,6 +136,22 @@
 
 **方案**：`apiRequest` 设置默认 15 秒并允许按调用点覆盖；轮询类请求取更短值。与 FIX-07 同批修改，避免两次触碰同一文件。
 
+### FIX-09 Staging 运行环境被错误标记为 Production
+
+状态：**已完成。**
+
+**证据**：`infra/k8s/base/configmap.yaml` 原先设置
+`AIW_ENVIRONMENT=production`，但同一套清单和工作流明确用于 Staging。这会让日志、
+Trace、指标和 `user_events.environment` 全部错误进入 Production 口径，导致
+GATE-01 的环境隔离与 Staging 证据不可成立。
+
+**修复**：清单改为 `staging`；配置校验把 Staging 与 Production 统一视为部署环境，
+继续强制非本地密钥、私有 COS、Rate Limit、Trusted Proxy、Provider HTTPS 和
+OpenTelemetry，避免修正标签后意外降低安全基线。Staging 同时启用 HSTS。
+
+**验收**：配置测试验证 Staging 仍执行部署安全校验，并锁定清单只能声明
+`AIW_ENVIRONMENT=staging`。
+
 ## 五、P1 优化项（发布 Gate 阻断）
 
 ### GATE-01 埋点体系（阻断全部功能的 Done 判定）

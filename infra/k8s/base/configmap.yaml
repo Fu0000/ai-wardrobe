@@ -4,7 +4,7 @@ metadata:
   name: ai-wardrobe-config
   namespace: ai-wardrobe
 data:
-  AIW_ENVIRONMENT: production
+  AIW_ENVIRONMENT: staging
   AIW_DEBUG: "false"
   AIW_LOG_LEVEL: INFO
   AIW_EXPOSE_API_DOCS: "false"

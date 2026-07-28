@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     orphan_upload_cleanup_interval_seconds: float = Field(default=300, ge=10, le=3_600)
 
     @model_validator(mode="after")
-    def validate_production_safety(self) -> "Settings":
+    def validate_deployed_environment_safety(self) -> "Settings":
         if self.diagnosis_timeout_seconds <= 0:
             raise ValueError("diagnosis timeout must be positive")
         if self.diagnosis_cost_ceiling_microunits <= 0:
@@ -210,21 +210,21 @@ class Settings(BaseSettings):
                 raise ValueError(f"invalid trusted proxy CIDR: {cidr}") from error
             if network.prefixlen == 0:
                 raise ValueError("trusted proxy CIDRs must not trust the entire address space")
-        if self.environment != "production":
+        if self.environment not in {"staging", "production"}:
             return self
 
         if self.access_token_ttl_seconds < 300:
-            raise ValueError("production access token TTL must be at least 300 seconds")
+            raise ValueError("deployed access token TTL must be at least 300 seconds")
         if self.debug:
-            raise ValueError("debug must be disabled in production")
+            raise ValueError("debug must be disabled in deployed environments")
         if self.expose_api_docs:
-            raise ValueError("API documentation must be disabled in production")
+            raise ValueError("API documentation must be disabled in deployed environments")
         if len(self.secret_key.get_secret_value()) < 32:
-            raise ValueError("production secret key must contain at least 32 characters")
+            raise ValueError("deployed secret key must contain at least 32 characters")
         if len(self.access_token_key.get_secret_value()) < 32:
-            raise ValueError("production access token key must contain at least 32 characters")
+            raise ValueError("deployed access token key must contain at least 32 characters")
         if len(self.identity_hmac_key.get_secret_value()) < 32:
-            raise ValueError("production identity HMAC key must contain at least 32 characters")
+            raise ValueError("deployed identity HMAC key must contain at least 32 characters")
         local_defaults = (
             (self.secret_key.get_secret_value(), _LOCAL_SECRET_KEY),
             (self.access_token_key.get_secret_value(), _LOCAL_ACCESS_TOKEN_KEY),
@@ -232,37 +232,35 @@ class Settings(BaseSettings):
             (encryption_key, _LOCAL_IDENTITY_ENCRYPTION_KEY),
         )
         if any(value == known_default for value, known_default in local_defaults):
-            raise ValueError(
-                "production cryptographic keys must not use local development defaults"
-            )
+            raise ValueError("deployed cryptographic keys must not use local development defaults")
         if not self.wechat_login_enabled:
-            raise ValueError("WeChat login must be enabled in production")
+            raise ValueError("WeChat login must be enabled in deployed environments")
         if not self.wechat_app_id or not self.wechat_app_secret.get_secret_value():
-            raise ValueError("WeChat credentials are required in production")
+            raise ValueError("WeChat credentials are required in deployed environments")
         if not self.wechat_api_base_url.startswith("https://"):
-            raise ValueError("production WeChat API must use HTTPS")
+            raise ValueError("deployed WeChat API must use HTTPS")
         if not self.cos_enabled:
-            raise ValueError("COS must be enabled in production")
+            raise ValueError("COS must be enabled in deployed environments")
         if not self.openai_enabled or not self.openai_api_key.get_secret_value():
-            raise ValueError("an AI provider must be configured in production")
+            raise ValueError("an AI provider must be configured in deployed environments")
         if not self.openai_base_url.startswith("https://"):
-            raise ValueError("production AI provider API must use HTTPS")
+            raise ValueError("deployed AI provider API must use HTTPS")
         if not self.rate_limit_enabled:
-            raise ValueError("rate limiting must be enabled in production")
+            raise ValueError("rate limiting must be enabled in deployed environments")
         if not self.trusted_proxy_cidrs:
-            raise ValueError("trusted proxy CIDRs are required in production")
+            raise ValueError("trusted proxy CIDRs are required in deployed environments")
         if not self.otel_enabled or not self.otel_exporter_otlp_endpoint.startswith(
             ("http://", "https://")
         ):
-            raise ValueError("production OpenTelemetry requires an OTLP HTTP endpoint")
+            raise ValueError("deployed OpenTelemetry requires an OTLP HTTP endpoint")
         if any(origin == "*" or not origin.startswith("https://") for origin in self.cors_origins):
-            raise ValueError("production CORS origins must use explicit HTTPS origins")
+            raise ValueError("deployed CORS origins must use explicit HTTPS origins")
         if (
             not self.cos_bucket
             or not self.cos_secret_id.get_secret_value()
             or not self.cos_secret_key.get_secret_value()
         ):
-            raise ValueError("COS credentials and bucket are required in production")
+            raise ValueError("COS credentials and bucket are required in deployed environments")
         return self
 
 

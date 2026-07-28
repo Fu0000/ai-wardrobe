@@ -92,7 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(
         SecurityHeadersMiddleware,
-        enable_hsts=app_settings.environment == "production",
+        enable_hsts=app_settings.environment in {"staging", "production"},
     )
     app.add_middleware(
         RequestContextMiddleware,

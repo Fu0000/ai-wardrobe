@@ -11,7 +11,7 @@ from app.modules.events.service import privacy_safe_user_hash
 
 
 def test_server_event_values_include_complete_privacy_safe_context() -> None:
-    settings = Settings(environment="staging")
+    settings = Settings.model_construct(environment="staging")
     user_id = uuid4()
     entity_id = uuid4()
     occurred_at = datetime.now(UTC)

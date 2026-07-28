@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from pydantic import SecretStr
+
 from app.core.config import Settings
 from app.modules.events.schemas import ClientEventBatch
 from app.modules.events.service import (
@@ -11,9 +13,9 @@ from app.modules.events.service import (
 
 
 def test_event_rows_use_server_context_and_privacy_safe_identity() -> None:
-    settings = Settings(
+    settings = Settings.model_construct(
         environment="staging",
-        identity_hmac_key="event-test-hmac-key-with-enough-entropy",
+        identity_hmac_key=SecretStr("event-test-hmac-key-with-enough-entropy"),
     )
     user_id = uuid4()
     event_id = uuid4()
