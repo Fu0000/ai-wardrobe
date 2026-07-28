@@ -159,30 +159,40 @@ flowchart LR
     DISP --> CELERY[Celery Queues]
     CELERY --> FAST[ai_fast Worker]
     CELERY --> IMAGE[image_generation Worker]
+    CELERY --> MEDIA[media_generation Worker]
+    CELERY --> MAINT[maintenance Worker]
     FAST --> AIGW[AI Gateway]
     IMAGE --> AIGW
     AIGW --> P1[Primary Provider]
     AIGW --> P2[Fallback Provider]
-    API --> OTEL[OpenTelemetry / CLS]
+    API --> OTEL[OpenTelemetry / Telemetry Backend]
     DISP --> OTEL
     FAST --> OTEL
     IMAGE --> OTEL
+    MEDIA --> OTEL
+    MAINT --> OTEL
 ```
 
 ### 4.2 MVP 模块
 
 ```text
 app/
-├── identity/        # 微信登录、内部用户
-├── assets/          # Upload Ticket、Asset Registry、删除
-├── diagnosis/       # 诊断与优化业务
-├── growth/          # 分享、归因、投票
-├── governance/      # Quota、删除、合规
-├── ai/              # Gateway、Provider、Prompt、Schema
-├── jobs/            # Job、Invocation、状态机
-├── events/          # Outbox、Dispatcher、事件
-├── infrastructure/  # DB、Redis、COS、Telemetry
-└── shared/          # 严格控制的通用类型
+├── api/             # 路由聚合
+├── core/            # 配置、中间件、日志与 Telemetry
+├── database/        # Session 与模型注册
+├── evaluation/      # AI Eval Runner
+├── worker/          # Celery 应用与任务入口
+└── modules/
+    ├── identity/    # 微信登录、内部用户
+    ├── assets/      # Upload Ticket、Asset Registry
+    ├── diagnosis/   # 诊断业务
+    ├── optimization/ # 最小优化业务
+    ├── growth/      # 分享、归因、投票
+    ├── feedback/    # 封测反馈
+    ├── governance/  # Quota、删除、合规
+    ├── ai/          # Gateway、Provider、Prompt、Schema
+    ├── jobs/        # Job、Invocation、状态机
+    └── events/      # Outbox、Dispatcher、事件
 ```
 
 每个模块遵循：
@@ -235,8 +245,8 @@ MVP 启用队列：
 
 - `ai_fast`：文字诊断与 Critic。
 - `image_generation`：Optimization 图片生成或编辑。
-- `background`：分享资产派生、清理和非紧急任务。
-- `governance`：DeletionJob。
+- `media_generation`：分享资产派生。
+- `maintenance`：DeletionJob、Outbox、过期任务与孤儿上传清理。
 
 关键流程：
 
@@ -325,7 +335,7 @@ API 创建业务记录与 OutboxEvent
 - Job Polling、`pendingJobs` 恢复和统一失败 UX。
 - Redis Token Bucket 限流。
 - Quota Reserve/Commit/Release。
-- Ownership Guard 与跨用户隔离测试。
+- 资源归属范围、关联一致性与跨用户隔离测试。
 
 退出条件：
 
@@ -517,7 +527,7 @@ API 创建业务记录与 OutboxEvent
 | INF-01 | 本地 Docker 开发环境 | DevOps/后端 | 1.5d | W1 | ENG-01 | PostgreSQL、Redis 可重复启动 | DONE |
 | INF-02 | Staging 云资源和网络 | DevOps | 2d | W1 | ENG-03 | API、DB、Redis、COS 连通且最小权限 | NOT_STARTED |
 | INF-03 | CI Pipeline | DevOps | 1.5d | W1 | ENG-01、ENG-02 | PR 自动执行 Test、Lint、Type Check、Build | DONE |
-| INF-04 | OpenTelemetry、TraceID 和 CLS | DevOps/后端 | 2d | W1～W2 | INF-02 | API、Worker、Dispatcher 可按 TraceID 查询 | IN_REVIEW |
+| INF-04 | OpenTelemetry、TraceID 和结构化日志 | DevOps/后端 | 2d | W1～W2 | INF-02 | API、Worker、Dispatcher 可按 TraceID 关联；托管日志后端留待 Staging 验收 | IN_REVIEW |
 | INF-05 | Staging 自动部署 | DevOps | 1.5d | W2 | INF-02、INF-03 | 主分支构建可部署到 Staging | IN_REVIEW |
 
 ### 6.3 数据库、身份与权限
@@ -529,7 +539,7 @@ API 创建业务记录与 OutboxEvent
 | AUTH-01 | 微信登录 Code Exchange | 后端/前端 | 2d | W2 | INF-02、ENG-02 | 登录成功、失败和过期处理完整 | IN_REVIEW |
 | AUTH-02 | Internal User ID 与 Identity 映射 | 后端 | 1d | W2 | DB-01、AUTH-01 | 微信身份与内部用户解耦 | IN_REVIEW |
 | AUTH-03 | `GET/PATCH /me` 与资料页 | 后端/前端 | 1.5d | W2 | AUTH-02 | 用户资料可读写并校验 Schema | DONE |
-| SEC-01 | Scoped Repository 与 OwnershipGuard | 后端 | 2d | W2 | DB-01、AUTH-02 | 所有 MVP 用户资源端点双层校验 | IN_REVIEW |
+| SEC-01 | 资源范围查询与关联归属校验 | 后端 | 2d | W2 | DB-01、AUTH-02 | 所有 MVP 用户资源端点执行查询范围与关联一致性双层校验 | IN_REVIEW |
 | SEC-02 | 跨用户隔离测试 | QA/后端 | 1d | W2、W5 | SEC-01 | 资产、诊断、优化、分享私有资源不可越权 | IN_REVIEW |
 
 ### 6.4 资产与上传
@@ -653,7 +663,7 @@ flowchart LR
 
 关键依赖不得绕过：
 
-- 未完成 Asset Complete 和 OwnershipGuard，不进入真实图片诊断联调。
+- 未完成 Asset Complete 和资源归属双层校验，不进入真实图片诊断联调。
 - 未完成 Job、Outbox 和失败释放，不开放 Optimization。
 - 未完成 Share/Private Asset 分离，不开放分享。
 - 未完成 AI Regression 和恢复演练，不进入封闭测试。

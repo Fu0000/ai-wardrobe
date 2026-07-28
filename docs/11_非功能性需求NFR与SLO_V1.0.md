@@ -43,7 +43,7 @@
 | 控制项 | 要求 |
 |:---|:---|
 | Rate Limiting | 普通 API 120 req/min/user，AI 任务 10 req/min/user |
-| Ownership Guard | Scoped Repository + OwnershipGuard 双层校验 |
+| 资源归属校验 | 查询范围 + 关联链一致性双层校验 |
 | Upload Validation | MIME + Magic Number + Dimensions 服务端校验 |
 | 请求体大小 | JSON ≤ 1MB，图片 ≤ 20MB（COS 直传） |
 | 跨用户隔离 | 所有资源查询带 user_id 条件 |

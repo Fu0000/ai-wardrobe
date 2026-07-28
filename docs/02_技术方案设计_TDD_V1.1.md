@@ -94,11 +94,13 @@ LangGraph：多步骤 Agent 决策、条件分支、HITL。
 - Garment Detection
 
 ## 六、异步队列
+当前 P0 运行队列：
 - ai_fast
 - image_generation
-- ingestion
-- background
-- governance
+- media_generation
+- maintenance
+
+`ingestion` 在 P0.5 进入对应能力时再启用，当前不创建空队列。
 
 所有高成本任务支持：
 - idempotency_key
@@ -272,10 +274,10 @@ Scene Snapshot 采用 Local Asset Cache（sceneId + layoutVersion + renderVersio
 - DeletionJob
 - Asset Registry
 
-### Ownership Guard
+### 资源归属校验
 所有资源操作端点必须校验资源归属。
-采用 Scoped Repository：查询时直接 WHERE id = ? AND user_id = ?，不存在"先查出来再判断"遗漏。
-OwnershipGuard 作为第二层保护。
+Repository 查询直接使用 WHERE id = ? AND user_id = ?，不存在“先查出来再判断”的遗漏。
+跨实体操作再校验关联链归属，形成查询范围与关联一致性的双层保护。
 Slot 等间接资源通过关系链校验：Slot → Layout → Scene → user_id。
 
 ### Rate Limiting

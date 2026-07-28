@@ -117,9 +117,9 @@ Rate Limit 防攻击，Quota 防成本，两者是独立系统。
 - 图片永远不进入 JSON API，通过 COS Upload Ticket 直传
 - 服务端必须校验 MIME Type、Magic Number、Image Dimensions，不能只相信客户端文件扩展名
 
-## 二十、Ownership Guard
+## 二十、资源归属校验
 所有资源操作端点必须校验 resource.user_id == current_user.id。
-采用 Scoped Repository：查询时直接 WHERE id = ? AND user_id = ?，不存在"先查出来再判断"遗漏。
-OwnershipGuard 作为第二层保护。
+Repository 查询直接使用 WHERE id = ? AND user_id = ?，不存在“先查出来再判断”的遗漏。
+跨实体操作再校验关联链归属，形成查询范围与关联一致性的双层保护。
 Slot 等间接资源通过关系链校验 Ownership：Slot → Layout → Scene → user_id。
 display-slots PATCH 额外校验：目标坐标在 Zone 的 bounds 范围内、Layout Status、Hit Region Constraints。

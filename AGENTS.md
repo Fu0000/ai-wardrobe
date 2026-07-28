@@ -147,29 +147,29 @@ P0 明确不做：
 
 ## 6. 后端模块与依赖规则
 
-规划模块：
+当前 P0 代码结构：
 
 ```text
 app/
-├── identity/
-├── assets/
-├── diagnosis/
-├── wardrobe/
-├── ingestion/
-├── styling/
-├── looks/
-├── personal_graph/
-├── visualization/
-├── scene_rendering/
-├── commerce/
-├── growth/
-├── governance/
-├── ai/
-├── jobs/
-├── events/
-├── infrastructure/
-└── shared/
+├── api/
+├── core/
+├── database/
+├── evaluation/
+├── worker/
+└── modules/
+    ├── ai/
+    ├── assets/
+    ├── diagnosis/
+    ├── events/
+    ├── feedback/
+    ├── governance/
+    ├── growth/
+    ├── identity/
+    ├── jobs/
+    └── optimization/
 ```
+
+后续阶段模块只有进入对应 Phase 后才能在 `app/modules/` 下创建。
 
 每个业务模块采用三层结构：
 
@@ -368,8 +368,8 @@ Prompt 与多模态安全：
 
 - 微信身份与 Internal User ID 解耦。
 - 所有资源操作必须校验所有权。
-- 查询时直接使用 `WHERE id = ? AND user_id = ?` 的 Scoped Repository。
-- OwnershipGuard 作为第二层保护，不能替代查询范围约束。
+- 查询时必须直接使用 `WHERE id = ? AND user_id = ?` 收窄资源范围。
+- 跨实体操作还必须校验关联链归属，不能用应用层事后判断替代查询范围约束。
 - Slot 等间接资源必须沿 `Slot → Layout → Scene → user_id` 校验。
 
 资产：
