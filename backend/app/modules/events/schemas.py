@@ -63,7 +63,7 @@ class DiagnosisResultViewedProperties(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     diagnosis_id: UUID
-    score_bucket: Literal["0_to_59", "60_to_79", "80_to_100"]
+    score_bucket: Literal["unknown", "0_to_59", "60_to_79", "80_to_100"]
 
 
 class DiagnosisResultViewedEvent(ClientEventBase):

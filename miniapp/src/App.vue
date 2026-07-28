@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { onLaunch } from "@dcloudio/uni-app";
+import { onLaunch, onShow } from "@dcloudio/uni-app";
 
 import { setReauthenticator } from "@/services/api";
+import {
+  flushTelemetry,
+  setTelemetryAccessTokenProvider,
+} from "@/services/telemetry";
 import { useAssetStore } from "@/stores/assets";
 import { useAuthStore } from "@/stores/auth";
 import { useDiagnosisStore } from "@/stores/diagnoses";
@@ -24,6 +28,7 @@ onLaunch(() => {
   // 服务端拒绝凭据时由 api 层回调重新登录。这里注入而非在 api.ts 中直接
   // import auth store，避免与 auth store 对 apiRequest 的依赖形成循环。
   setReauthenticator(() => authStore.renewAfterRejection());
+  setTelemetryAccessTokenProvider(() => authStore.accessToken);
   assetStore.hydrate();
   authStore.hydrate();
   diagnosisStore.hydrate();
@@ -33,11 +38,16 @@ onLaunch(() => {
   photoDeletionStore.hydrate();
   shareStore.hydrate();
   void authStore.authenticate().then(async () => {
+    await flushTelemetry();
     await deletionStore.reconcileIdentity(authStore.userId);
     if (deletionStore.active || deletionStore.inferredCompleted) {
       uni.reLaunch({ url: "/pages/profile/deletion" });
     }
   });
+});
+
+onShow(() => {
+  void flushTelemetry();
 });
 </script>
 

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { storeToRefs } from "pinia";
 
 import PrimaryAction from "@/components/PrimaryAction.vue";
 import StateCard from "@/components/StateCard.vue";
 import { feedbackPageUrl } from "@/lib/navigation";
 import { type Occasion } from "@/services/diagnoses";
+import { trackOnce } from "@/services/telemetry";
 import { useDiagnosisStore } from "@/stores/diagnoses";
 import { useOptimizationStore } from "@/stores/optimizations";
 
@@ -47,6 +48,11 @@ const requestOptimization = async () => {
   if (!current.value || optimizationSubmitting.value) {
     return;
   }
+  trackOnce(
+    `diagnosis.optimization.clicked:${current.value.id}`,
+    "diagnosis.optimization.clicked",
+    { diagnosis_id: current.value.id },
+  );
   try {
     const optimization = await optimizations.create(current.value.id);
     uni.navigateTo({ url: `/pages/optimization/index?id=${optimization.id}` });
@@ -70,6 +76,32 @@ onLoad((query) => {
     diagnoses.recentDiagnosisId;
 });
 onShow(refresh);
+
+watch(
+  result,
+  (value) => {
+    if (!value || !diagnosisId) {
+      return;
+    }
+    const scoreBucket =
+      value.score === null
+        ? "unknown"
+        : value.score < 60
+          ? "0_to_59"
+          : value.score < 80
+            ? "60_to_79"
+            : "80_to_100";
+    trackOnce(
+      `diagnosis.result.viewed:${diagnosisId}`,
+      "diagnosis.result.viewed",
+      {
+        diagnosis_id: diagnosisId,
+        score_bucket: scoreBucket,
+      },
+    );
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

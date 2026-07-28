@@ -15,6 +15,13 @@ import {
   type SelectedImage,
   uploadImageToTicket,
 } from "@/services/assets";
+import { ApiError } from "@/services/api";
+import {
+  track,
+  trackOnce,
+  uploadProgressBucket,
+  uploadSizeBucket,
+} from "@/services/telemetry";
 import { useAuthStore } from "@/stores/auth";
 
 const STORAGE_KEY = "aiw:source-draft:v1";
@@ -47,6 +54,21 @@ function errorMessage(error: unknown): string {
     return error.message;
   }
   return "图片上传失败，请稍后重试。";
+}
+
+function interruptionReason(
+  error: unknown,
+): "network" | "timeout" | "unknown" {
+  if (error instanceof Error && error.message.toLowerCase().includes("timeout")) {
+    return "timeout";
+  }
+  if (
+    error instanceof ApiError &&
+    (error.statusCode === 0 || error.code === "NETWORK_ERROR")
+  ) {
+    return "network";
+  }
+  return "unknown";
 }
 
 export const useAssetStore = defineStore("assets", {
@@ -136,6 +158,14 @@ export const useAssetStore = defineStore("assets", {
         }
         this.assetId = ticket.asset_id;
         this.setPhase("uploading");
+        trackOnce(
+          `asset.upload.started:${ticket.asset_id}`,
+          "asset.upload.started",
+          {
+            asset_id: ticket.asset_id,
+            size_bucket: uploadSizeBucket(this.image.sizeBytes),
+          },
+        );
 
         const directUpload = uploadImageToTicket(this.image, ticket);
         abortCurrentUpload = directUpload.abort;
@@ -165,6 +195,13 @@ export const useAssetStore = defineStore("assets", {
         if (isStale()) {
           return;
         }
+        if (this.assetId) {
+          track("asset.upload.interrupted", {
+            asset_id: this.assetId,
+            reason: interruptionReason(error),
+            progress_bucket: uploadProgressBucket(this.progress),
+          });
+        }
         this.errorMessage = errorMessage(error);
         this.setPhase("failed");
       }
@@ -183,11 +220,20 @@ export const useAssetStore = defineStore("assets", {
       }
     },
     cancelUpload() {
+      const interruptedAssetId = this.assetId;
+      const interruptedProgress = this.progress;
       uploadGeneration += 1;
       abortCurrentUpload?.();
       abortCurrentUpload = null;
       this.errorMessage = "已暂停上传，可以稍后重试。";
       this.setPhase("cancelled");
+      if (interruptedAssetId) {
+        track("asset.upload.interrupted", {
+          asset_id: interruptedAssetId,
+          reason: "cancelled",
+          progress_bucket: uploadProgressBucket(interruptedProgress),
+        });
+      }
     },
     async clearDraft() {
       uploadGeneration += 1;

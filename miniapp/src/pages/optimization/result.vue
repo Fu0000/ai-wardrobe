@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 
 import PrivacyNote from "@/components/PrivacyNote.vue";
 import StateCard from "@/components/StateCard.vue";
+import { trackOnce } from "@/services/telemetry";
 import { useOptimizationStore } from "@/stores/optimizations";
 
 const optimizations = useOptimizationStore();
@@ -83,6 +84,28 @@ onLoad((query) => {
     optimizations.recentOptimizationId;
 });
 onShow(refresh);
+
+watch(
+  result,
+  (value) => {
+    if (
+      !value ||
+      !optimizationId ||
+      value.job_status !== "COMPLETED" ||
+      !value.before_image_url ||
+      !value.after_image_url ||
+      !value.quality_passed
+    ) {
+      return;
+    }
+    trackOnce(
+      `optimization.before_after.viewed:${optimizationId}`,
+      "optimization.before_after.viewed",
+      { optimization_id: optimizationId },
+    );
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
