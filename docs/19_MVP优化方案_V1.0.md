@@ -217,15 +217,15 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
 
 ### GATE-04 测试能力补齐
 
-状态：**本地代码与自动化验证已完成；最新增量待远端 CI 复验。**
+状态：**已完成。**
 
 **证据**：
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
 - CI 已监听 `main`、`develop` 与 Pull Request，启动 PostgreSQL、Redis，并设置
   `AIW_RUN_INTEGRATION_TESTS=1`；当前 36 个集成测试可实际执行。远端
-  [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 的 Backend
-  与 Miniapp Job 均已通过。
+  [CI run 30349155533](https://github.com/Fu0000/ai-wardrobe/actions/runs/30349155533)
+  已在 `develop@f6a44dc` 实际通过 Backend 36 个集成测试和 Miniapp 73 个测试。
 - `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
   耗尽退款；`OptimizationExecutor` 覆盖成功幂等事件和失败退款，`ShareAssetExecutor`
   覆盖派生资产/事件事务完成、幂等和失败 Token Fencing，`DeletionExecutor` 覆盖账号及
@@ -252,7 +252,7 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
    （使用既有 `@vue/test-utils`、测试文件级 Happy DOM 和真实 Pinia 完成，无需增加只为
    包装 Pinia 的测试依赖）
 
-**验收**：本地门禁已满足；推送后由 CI 实际执行 36 个集成测试及 73 个小程序测试。
+**验收**：本地与远端门禁均满足，CI 已实际执行 36 个集成测试及 73 个小程序测试。
 
 ### GATE-05 迁移与孤儿资产
 
@@ -291,6 +291,28 @@ Docker 实库验证曾发现 `20260726_0004` 已创建
 契约/真实 PostgreSQL/Redis 测试通过；小程序 ESLint、类型检查、61 个
 测试与微信构建通过。朋友圈菜单与好友二次转发仍需在微信开发者工具和真机按
 `docs/16` 的 Growth 用例留存证据。
+
+### GATE-07 性能与容量证据
+
+状态：**本地 API 基线已完成；Staging AI/COS、队列恢复和低端安卓仍待验收。**
+
+`make local-api-baseline` 现使用固定摘要的 k6 2.1.0 镜像，只允许本地环境与回环
+PostgreSQL，自动创建权限最小的临时性能用户并在成功或失败退出时清理。压测报告原子
+落盘且不包含 Token、用户 ID 或私有资产引用；CI 同时校验 k6 与 Shell 语法。原脚本
+错误使用不存在的 `GET /api/v1/me/profile`，以及在本地 OTel 关闭时硬要求
+`X-Trace-ID` 导致的假失败均已修复，现检查真实 `GET /api/v1/me` 与必有的
+`X-Request-ID`。
+
+`develop@f6a44dc` 的 5 → 20 req/s 正式本地基线完成 4,650 次业务请求，成功率
+100%、HTTP 失败率 0%、P95 14.99 ms、P99 20.73 ms；PostgreSQL 连接峰值 3/100，
+Redis 内存峰值 1,735,560/268,435,456 bytes，临时账号与目录残留均为 0。完整脱敏
+证据位于 `infra/operations/evidence/2026-07-28_local_api_performance.md`。
+
+该结果不替代 REL-004：本地 API 为单个 Uvicorn `--reload` 进程，数据库和 Redis
+没有生产资源限制，且未触发真实 Provider/COS。剩余验收必须在 Staging 覆盖真实
+Diagnosis 并发、图片队列积压与恢复、Queue Drain Time、额度/Job/DB/COS 对账、
+Dashboard 资源水位和低端安卓体验后，才能将 `TST-03` 与 Performance Gate 转为
+`DONE/PASS`。
 
 ## 六、P2 优化项（架构债）
 

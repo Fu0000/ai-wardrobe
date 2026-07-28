@@ -464,8 +464,8 @@ API 创建业务记录与 OutboxEvent
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI run 30339862467](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339862467)
-  在 `develop@4944b0b` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30349155533](https://github.com/Fu0000/ai-wardrobe/actions/runs/30349155533)
+  在 `develop@f6a44dc` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
@@ -506,15 +506,20 @@ API 创建业务记录与 OutboxEvent
   GitHub Actions 固定完整 Commit SHA，并由 Dependabot 周期更新。
 - W6 QA/治理证据：Bug 分级、34 项核心验收用例、三类微信真机矩阵、Release Gate、Go/No-Go 决策规则、发布观察和回滚清单已形成独立可签署文档。
 - W6 Recovery/Canary 代码证据：基于 libpq Service 的校验和逻辑备份、隔离空库单事务恢复、RPO/RTO/行数/关系不变量报告；本地 Docker PostgreSQL 18 演练已完成，恢复耗时 0.263 秒、备份年龄 0.563 秒、迁移版本与 6 类行数一致、4 类关系不变量为 0，但源库为空且不能替代 Staging 含数据恢复；AI 用户稳定分桶、创建时 Policy Snapshot、Worker 按快照执行、0/10/50/100% Staging 审批工作流和回滚阈值 Runbook。
-- W6 Performance 代码证据：k6 2.1 API 读流量阶梯、真实 AI 成本/授权数据双重确认、每授权 Asset 单次 Diagnosis 并发与终态轮询、成功率/P90/P95/5xx 阈值、停止条件和标准报告模板。
+- W6 Performance 代码与本地执行证据：k6 2.1 API 读流量阶梯、真实 AI
+  成本/授权数据双重确认、每授权 Asset 单次 Diagnosis 并发与终态轮询、
+  成功率/P90/P95/5xx 阈值、停止条件和标准报告模板；`develop@f6a44dc` 本地
+  5 → 20 req/s 正式基线完成 4,650 次业务请求，成功率 100%、HTTP 失败率 0%、
+  P95 14.99 ms、P99 20.73 ms，临时账号与目录均无残留。脱敏证据归档于
+  `infra/operations/evidence/2026-07-28_local_api_performance.md`。
 - W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、
   Trace/页面/设备最小化上下文、幂等防重、版本化游标与用户隔离分页、诊断结果直达
   反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意
   仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
-- W6 待验收：真实 COS 删除与 PostgreSQL 事务回归、Staging OTLP/Dashboard 与真实
-  On-call 告警送达、含数据备份恢复、Canary/回滚、性能与安全测试、微信真机，以及
-  Go/No-Go 签署。
+- W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
+  含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、安全测试、微信真机，
+  以及 Go/No-Go 签署。
 
 ### 6.1 产品、设计与项目治理
 

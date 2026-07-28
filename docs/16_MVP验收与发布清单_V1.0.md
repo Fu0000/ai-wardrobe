@@ -113,6 +113,7 @@ make typecheck
 make test
 make security-audit
 make build
+make local-api-baseline
 cd backend && uv run alembic upgrade head --sql
 ```
 
@@ -139,7 +140,7 @@ unset AIW_SMOKE_ACCESS_TOKEN
 | AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：缺授权数据和真实 Provider |
 | Staging E2E | 微信登录、COS、全部 Worker、分享投票和冒烟通过 | BLOCKED：缺 Staging 与凭据 |
 | Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复演练通过；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
-| Performance | 核心容量、P95、队列积压和低端安卓达标 | NOT_RUN |
+| Performance | 核心容量、P95、队列积压和低端安卓达标 | IN_PROGRESS：本地 5→20 req/s API 基线为 100% 成功、0% HTTP 失败、P95 14.99 ms；Staging AI/COS、队列恢复、资源水位与低端安卓未验收 |
 | Operations | Dashboard、On-call、Runbook、反馈入口和状态沟通就位 | NOT_RUN |
 | Defects | Blocker=0、Critical=0；Major 均有 Owner 和截止日 | PENDING |
 | Sign-off | 产品、QA、技术、AI、DevOps 完成签署 | PENDING |
