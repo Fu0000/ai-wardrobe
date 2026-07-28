@@ -9,9 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.telemetry import current_trace_fields
 from app.modules.assets.repository import AssetRepository
 from app.modules.assets.service import AssetApplicationService, AssetServiceError
 from app.modules.assets.storage import ObjectStorage
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+)
 from app.modules.identity.api import current_user
 from app.modules.identity.models import User
 
@@ -142,6 +147,25 @@ async def complete_upload(
         if error.commit_state:
             await session.commit()
         _raise_asset_error(error)
+    settings: Settings = request.app.state.settings
+    await ServerEventRecorder(
+        session,
+        settings,
+        ServerEventContext(
+            request_id=str(getattr(request.state, "request_id", "unavailable")),
+            trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        ),
+    ).record(
+        subject_user_id=user.id,
+        event_name="asset.upload.completed",
+        entity_type="UserAsset",
+        entity_id=asset.asset_id,
+        dedupe_key=str(asset.asset_id),
+        properties={
+            "asset_id": str(asset.asset_id),
+            "latency_ms": asset.latency_ms,
+        },
+    )
     return AssetResponse(
         id=asset.asset_id,
         status=asset.status,

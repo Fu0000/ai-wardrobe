@@ -13,7 +13,11 @@ from app.api.dependencies import get_http_client, get_session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.rate_limit import RateLimitGuard
-from app.modules.growth.models import UserEvent
+from app.core.telemetry import current_trace_fields
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+)
 from app.modules.identity.models import User, UserProfile, UserStatus
 from app.modules.identity.repository import IdentityRepository
 from app.modules.identity.security import (
@@ -181,6 +185,21 @@ async def login_with_wechat(
             status_code=503,
         ) from error
 
+    await ServerEventRecorder(
+        session,
+        settings,
+        ServerEventContext(
+            request_id=str(getattr(request.state, "request_id", "unavailable")),
+            trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        ),
+    ).record(
+        subject_user_id=result.user_id,
+        event_name="auth.wechat.succeeded",
+        entity_type="User",
+        entity_id=result.user_id,
+        dedupe_key=f"login:{getattr(request.state, 'request_id', uuid4().hex)}",
+        properties={"is_new_user": result.is_new_user},
+    )
     return LoginResponse(
         access_token=result.access_token,
         expires_in=result.expires_in_seconds,
@@ -213,6 +232,7 @@ async def get_me(
 @router.post("/me/profile", response_model=MeResponse, include_in_schema=False)
 async def update_profile(
     payload: UpdateProfileRequest,
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> MeResponse:
@@ -236,20 +256,24 @@ async def update_profile(
         )
         if consent_changed:
             granted = profile.has_ai_processing_consent
-            session.add(
-                UserEvent(
-                    id=uuid4(),
-                    user_id=user.id,
-                    event_name="consent.ai.accepted" if granted else "consent.ai.revoked",
-                    entity_type="User",
-                    entity_id=user.id,
-                    dedupe_key=f"consent:{uuid4().hex}",
-                    properties={
-                        "consent_version": (
-                            profile.consent_version if granted else previous_consent_version
-                        )
-                    },
-                )
+            await ServerEventRecorder(
+                session,
+                _settings(request),
+                ServerEventContext(
+                    request_id=str(getattr(request.state, "request_id", "unavailable")),
+                    trace_id=current_trace_fields().get("trace_id", "unavailable"),
+                ),
+            ).record(
+                subject_user_id=user.id,
+                event_name="consent.ai.accepted" if granted else "consent.ai.revoked",
+                entity_type="User",
+                entity_id=user.id,
+                dedupe_key=f"consent:{uuid4().hex}",
+                properties={
+                    "consent_version": (
+                        profile.consent_version if granted else previous_consent_version
+                    )
+                },
             )
 
     await session.flush()

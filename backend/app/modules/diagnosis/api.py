@@ -11,7 +11,7 @@ from app.api.dependencies import get_session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.rate_limit import RateLimitGuard
-from app.core.telemetry import record_product_action
+from app.core.telemetry import current_trace_fields, record_product_action
 from app.modules.assets.repository import AssetRepository
 from app.modules.diagnosis.models import DiagnosisStatus, StyleDiagnosis
 from app.modules.diagnosis.repository import DiagnosisRecord, DiagnosisRepository
@@ -26,6 +26,10 @@ from app.modules.diagnosis.service import (
     CreatedDiagnosis,
     DiagnosisApplicationService,
     DiagnosisServiceError,
+)
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
 )
 from app.modules.governance.quota import QuotaExceededError, QuotaRepository
 from app.modules.identity.api import current_user
@@ -202,6 +206,24 @@ async def create_diagnosis(
         ) from error
     except DiagnosisServiceError as error:
         _raise_service_error(error)
+    await ServerEventRecorder(
+        session,
+        settings,
+        ServerEventContext(
+            request_id=str(getattr(request.state, "request_id", "unavailable")),
+            trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        ),
+    ).record(
+        subject_user_id=user.id,
+        event_name="diagnosis.job.created",
+        entity_type="GenerationJob",
+        entity_id=record.job.id,
+        dedupe_key=str(record.job.id),
+        properties={
+            "job_id": str(record.job.id),
+            "occasion": record.diagnosis.occasion,
+        },
+    )
     response = _response(
         record,
         reused=created.reused,

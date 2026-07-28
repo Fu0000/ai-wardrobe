@@ -220,6 +220,7 @@ async def test_complete_upload_validates_and_marks_asset_ready() -> None:
 
     assert completed.status == AssetStatus.READY
     assert (completed.width, completed.height) == (640, 960)
+    assert completed.latency_ms >= 0
     assert repository.asset is not None
     assert repository.asset.status == AssetStatus.READY
 

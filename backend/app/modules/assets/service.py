@@ -48,6 +48,7 @@ class CompletedAsset:
     width: int
     height: int
     content_type: str
+    latency_ms: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,10 +221,17 @@ class AssetApplicationService:
     def _completed(asset: UserAsset) -> CompletedAsset:
         if asset.width is None or asset.height is None or asset.content_type is None:
             raise AssetServiceError(code="ASSET_METADATA_INCOMPLETE", retryable=True)
+        created_at = getattr(asset, "created_at", None)
+        latency_ms = (
+            max(0, round((datetime.now(UTC) - created_at).total_seconds() * 1_000))
+            if isinstance(created_at, datetime)
+            else 0
+        )
         return CompletedAsset(
             asset_id=asset.id,
             status=asset.status,
             width=asset.width,
             height=asset.height,
             content_type=asset.content_type,
+            latency_ms=latency_ms,
         )
