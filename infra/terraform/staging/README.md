@@ -100,6 +100,38 @@ GitHub-hosted Runner 访问控制面；Runner 必须一次一实例、任务后�
 并绑定覆盖精确域名的既有证书，仍需云账号、GitHub 注册凭据和审批。证书私钥不得进入
 Terraform、GitHub 或 Kubernetes，本模块和 Ingress 只引用证书 ID。
 
+## 部署后的只读基础设施审计
+
+真实 Plan 经独立 Reviewer 批准、Apply 和 `Deploy Staging` 完成后，从 `develop`
+手动运行 `Staging Infrastructure Audit` 工作流。输入必须是当前 `develop` 的完整
+40 位、已部署 Commit SHA，并精确确认
+`I_ACKNOWLEDGE_STAGING_INFRASTRUCTURE_AUDIT_READ_ONLY`。受保护环境
+`staging-infrastructure-audit` 至少配置一名独立 Reviewer，并提供：
+
+- 只读远程 State 身份与 `STAGING_TERRAFORM_BACKEND_CONFIG_B64`；
+- `STAGING_KUBECONFIG_B64` 和精确 `STAGING_KUBE_CONTEXT`；
+- `STAGING_API_BASE_URL`、`STAGING_API_HOST`、`STAGING_EDGE_CLB_ID` 与
+  `STAGING_TLS_CERT_ID`。
+
+工作流只能在 VPC 内、带 `ai-wardrobe-staging` 标签的临时 Runner 上执行。它不注入
+TencentCloud Provider 凭据，不执行 `plan/apply/refresh`，也不执行任何
+`kubectl apply/patch/create/delete`。Terraform State 只导出
+`compute_contract`、`data_service_contract`、固定 CLB ID/VIP 四类白名单值；
+Kubernetes 只读取 Namespace、ConfigMap、Deployment、Node 和 Ingress，并且 Secret
+只判断名称与 CA Key 是否存在，永不读取或记录 Secret 值。
+
+验收器要求：State 合同仍满足私有跨区 TKE、无节点公网 IP、CLS/CLB/数据层安全基线；
+六个 Deployment 全部就绪且镜像精确绑定候选 SHA；至少两个 Ready Node 分布在两个
+可用区；PostgreSQL、Redis、COS Readiness 全部为 `ok`；Ingress 固定复用同一 CLB，
+DNS 精确指向 Terraform VIP；系统信任链与 TLS 1.2 请求成功，HSTS 和 307 跳转正确。
+原始 State/Kubernetes/网络证据仅存在于 Runner 临时目录并在结束时删除；Artifact
+只包含权限为 `0600` 的脱敏报告，不包含资源 ID、VIP、域名、Context、证书 ID、连接
+信息或 Secret，保留 14 天。
+
+该审计不替代同一候选 SHA 的真实只读 Terraform Plan，也不替代 COS 双账号、故障注入、
+恢复演练或成本复核。没有真实云资源时工作流应保持未运行，禁止用本地 Fixture 把
+INF-02 改为 `DONE`。
+
 ## 当前不代表完成
 
 `terraform validate` 只证明语法和 Provider Schema 合法。INF-02 在 API、PostgreSQL、

@@ -117,6 +117,14 @@ make local-api-baseline
 cd backend && uv run alembic upgrade head --sql
 ```
 
+真实 Staging 部署后必须从当前 `develop` 候选 SHA 手动运行受保护的
+`Staging Infrastructure Audit` 工作流。执行前应先完成同一 SHA 的只读 Terraform
+Plan 审批。该工作流只读远程 State 白名单合同和 Kubernetes 运行状态，校验跨区私有
+TKE、无节点公网 IP、不可变镜像、数据依赖 Readiness、固定 CLB/DNS、TLS/HSTS 与
+HTTP 307。只允许归档脱敏 `report.json`；原始资源 ID、VIP、域名、Kube Context、
+证书 ID、连接信息和 Secret 不得进入 Artifact。工作流代码完成不能替代真实运行证据，
+首次 `PASS` 报告和对应 GitHub Run URL 产生前，INF-02 保持 `IN_PROGRESS`。
+
 Staging 使用授权照片执行完整 API 冒烟；Access Token 只能通过环境变量注入：
 
 ```bash

@@ -1,0 +1,257 @@
+name: Staging Infrastructure Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character develop commit SHA already deployed to Staging
+        required: true
+        type: string
+      confirmation:
+        description: Type I_ACKNOWLEDGE_STAGING_INFRASTRUCTURE_AUDIT_READ_ONLY
+        required: true
+        type: string
+
+concurrency:
+  group: ai-wardrobe-staging-infrastructure-audit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Read-only state, cluster, and HTTPS audit
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-wardrobe-staging
+    timeout-minutes: 20
+    environment: staging-infrastructure-audit
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
+
+      - name: Enforce current develop candidate and explicit confirmation
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$GITHUB_REF_NAME" = "develop"
+          test "$CONFIRMATION" = \
+            "I_ACKNOWLEDGE_STAGING_INFRASTRUCTURE_AUDIT_READ_ONLY"
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
+          test "$CANDIDATE_SHA" = "$(git rev-parse HEAD)"
+          image_owner="$(
+            printf '%s' "$GITHUB_REPOSITORY_OWNER" \
+              | tr '[:upper:]' '[:lower:]'
+          )"
+          [[ "$image_owner" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+          echo "CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
+          echo "EXPECTED_IMAGE=ghcr.io/${image_owner}/ai-wardrobe-api:${CANDIDATE_SHA}" \
+            >> "$GITHUB_ENV"
+
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.35.0
+
+      - name: Materialize ephemeral read-only inputs
+        env:
+          BACKEND_CONFIG_B64: ${{ secrets.STAGING_TERRAFORM_BACKEND_CONFIG_B64 }}
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$BACKEND_CONFIG_B64"
+          test -n "$KUBECONFIG_B64"
+          for path in \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-input" \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-evidence" \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-report"; do
+            test ! -e "$path"
+          done
+          install -d -m 700 "$RUNNER_TEMP/aiw-infrastructure-audit-input"
+          install -d -m 700 "$RUNNER_TEMP/aiw-infrastructure-audit-evidence"
+          install -d -m 700 "$RUNNER_TEMP/aiw-infrastructure-audit-report"
+          printf '%s' "$BACKEND_CONFIG_B64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/aiw-infrastructure-audit-input/backend.hcl"
+          printf '%s' "$KUBECONFIG_B64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/aiw-infrastructure-audit-input/kubeconfig"
+          chmod 600 \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-input/backend.hcl" \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-input/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/aiw-infrastructure-audit-input/kubeconfig" \
+            >> "$GITHUB_ENV"
+
+      - name: Export sanitized Terraform State contract
+        env:
+          AIW_TERRAFORM_AUDIT_CONFIRMATION: I_ACKNOWLEDGE_STAGING_AUDIT_READ_ONLY
+          AIW_TERRAFORM_BACKEND_CONFIG: ${{ runner.temp }}/aiw-infrastructure-audit-input/backend.hcl
+          AIW_TERRAFORM_AUDIT_OUTPUT_DIR: ${{ runner.temp }}/aiw-infrastructure-audit-evidence
+          AIW_TERRAFORM_STATE_ACCESS_KEY_ID: ${{ secrets.STAGING_TERRAFORM_STATE_ACCESS_KEY_ID }}
+          AIW_TERRAFORM_STATE_SECRET_ACCESS_KEY: ${{ secrets.STAGING_TERRAFORM_STATE_SECRET_ACCESS_KEY }}
+          AIW_TERRAFORM_STATE_SESSION_TOKEN: ${{ secrets.STAGING_TERRAFORM_STATE_SESSION_TOKEN }}
+        run: ./scripts/infra.sh terraform-staging-audit-state
+
+      - name: Capture read-only Kubernetes evidence
+        env:
+          STAGING_KUBE_CONTEXT: ${{ vars.STAGING_KUBE_CONTEXT }}
+        run: |
+          test -n "$STAGING_KUBE_CONTEXT"
+          evidence="$RUNNER_TEMP/aiw-infrastructure-audit-evidence"
+          kubectl config current-context > "$evidence/kube-context.txt"
+          test "$(cat "$evidence/kube-context.txt")" = "$STAGING_KUBE_CONTEXT"
+          kubectl --context "$STAGING_KUBE_CONTEXT" \
+            get namespace ai-wardrobe -o json \
+            > "$evidence/namespace.json"
+          kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get configmap ai-wardrobe-config -o json \
+            > "$evidence/configmap.json"
+          kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get deployments -o json \
+            > "$evidence/deployments.json"
+          kubectl --context "$STAGING_KUBE_CONTEXT" \
+            get nodes -l ai-wardrobe/environment=staging -o json \
+            > "$evidence/nodes.json"
+          kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get ingress ai-wardrobe-api -o json \
+            > "$evidence/ingress.json"
+          kubectl --context "$STAGING_KUBE_CONTEXT" -n kube-system \
+            get configmap tke-ingress-controller-config \
+            --output=jsonpath='{.data.VERSION}' \
+            > "$evidence/controller-version.txt"
+
+          application_secret_present=false
+          registry_secret_present=false
+          postgresql_ca_present=false
+          redis_ca_present=false
+          if kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get secret ai-wardrobe-secrets >/dev/null; then
+            application_secret_present=true
+          fi
+          if kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get secret ai-wardrobe-registry >/dev/null; then
+            registry_secret_present=true
+          fi
+          if kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get secret ai-wardrobe-data-ca \
+            --output=jsonpath='{.data.postgresql-ca\.pem}' \
+            | grep -q .; then
+            postgresql_ca_present=true
+          fi
+          if kubectl --context "$STAGING_KUBE_CONTEXT" -n ai-wardrobe \
+            get secret ai-wardrobe-data-ca \
+            --output=jsonpath='{.data.redis-ca\.pem}' \
+            | grep -q .; then
+            redis_ca_present=true
+          fi
+          jq -n \
+            --argjson application "$application_secret_present" \
+            --argjson registry "$registry_secret_present" \
+            --argjson postgresql_ca "$postgresql_ca_present" \
+            --argjson redis_ca "$redis_ca_present" \
+            '{
+              application_secret_present: $application,
+              registry_secret_present: $registry,
+              postgresql_ca_present: $postgresql_ca,
+              redis_ca_present: $redis_ca
+            }' \
+            > "$evidence/secret-checks.json"
+          chmod 600 "$evidence"/*
+
+      - name: Capture trusted HTTPS and dependency evidence
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
+        run: |
+          test -n "$STAGING_API_BASE_URL"
+          test -n "$STAGING_API_HOST"
+          evidence="$RUNNER_TEMP/aiw-infrastructure-audit-evidence"
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            --max-time 30 \
+            --proto '=https' \
+            --tlsv1.2 \
+            --dump-header "$evidence/https-headers.txt" \
+            --output "$evidence/health.json" \
+            --write-out '%{http_code}' \
+            "${STAGING_API_BASE_URL%/}/health/ready" \
+            > "$evidence/health-status.txt"
+          read -r redirect_status redirect_location < <(
+            curl \
+              --silent \
+              --show-error \
+              --max-time 15 \
+              --output /dev/null \
+              --write-out '%{http_code} %{redirect_url}\n' \
+              "http://${STAGING_API_HOST}/health/ready"
+          )
+          jq -n \
+            --argjson status "$redirect_status" \
+            --arg location "$redirect_location" \
+            '{status: $status, location: $location}' \
+            > "$evidence/redirect.json"
+          chmod 600 "$evidence"/*
+
+      - name: Validate and create redacted report
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
+          STAGING_EDGE_CLB_ID: ${{ vars.STAGING_EDGE_CLB_ID }}
+          STAGING_KUBE_CONTEXT: ${{ vars.STAGING_KUBE_CONTEXT }}
+          STAGING_TLS_CERT_ID: ${{ vars.STAGING_TLS_CERT_ID }}
+        run: |
+          test -n "$STAGING_EDGE_CLB_ID"
+          test -n "$STAGING_TLS_CERT_ID"
+          python backend/scripts/deployment/staging_infrastructure_audit.py \
+            --evidence-dir "$RUNNER_TEMP/aiw-infrastructure-audit-evidence" \
+            --report "$RUNNER_TEMP/aiw-infrastructure-audit-report/report.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --expected-image "$EXPECTED_IMAGE" \
+            --api-host "$STAGING_API_HOST" \
+            --api-base-url "$STAGING_API_BASE_URL" \
+            --expected-edge-clb-id "$STAGING_EDGE_CLB_ID" \
+            --expected-tls-certificate-id "$STAGING_TLS_CERT_ID" \
+            --expected-kube-context "$STAGING_KUBE_CONTEXT"
+
+      - name: Record redacted audit summary
+        run: |
+          report="$RUNNER_TEMP/aiw-infrastructure-audit-report/report.json"
+          test "$(jq -r '.result' "$report")" = "PASS"
+          {
+            echo "## Staging Infrastructure Audit"
+            echo
+            echo "- Candidate: \`$(jq -r '.candidate_sha' "$report")\`"
+            echo "- Result: \`PASS\`"
+            echo "- Terraform State contract, private TKE runtime, data readiness,"
+            echo "  immutable workloads, fixed CLB/DNS, TLS/HSTS and 307 redirect passed."
+            echo "- Report is redacted; raw evidence remains ephemeral and is never uploaded."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload redacted audit report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: staging-infrastructure-audit-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/aiw-infrastructure-audit-report/report.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Destroy ephemeral infrastructure evidence
+        if: ${{ always() }}
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-input/backend.hcl" \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-input/kubeconfig" \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-evidence/"* \
+            "$RUNNER_TEMP/aiw-infrastructure-audit-report/report.json"
+          rmdir "$RUNNER_TEMP/aiw-infrastructure-audit-input" 2>/dev/null || true
+          rmdir "$RUNNER_TEMP/aiw-infrastructure-audit-evidence" 2>/dev/null || true
+          rmdir "$RUNNER_TEMP/aiw-infrastructure-audit-report" 2>/dev/null || true

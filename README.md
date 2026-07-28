@@ -110,6 +110,10 @@ Makefile 只负责提供稳定命令名，实际执行统一进入 `scripts/*.sh
 合同；实际 Plan/Apply 的远程状态、短期凭据、双人复核和销毁保护要求见
 `infra/terraform/staging/README.md`。
 
+真实资源部署后，从 `develop` 手动运行受保护的 `Staging Infrastructure Audit`
+工作流。它以只读方式核对 Terraform State 白名单合同、私有 TKE、不可变镜像、
+PostgreSQL/Redis/COS 就绪、固定 CLB/DNS、TLS/HSTS 和 HTTP 307，只归档脱敏报告。
+
 供应链扫描对未批准的 High/Critical 漏洞失败；临时例外必须登记在
 `docs/18_供应链安全例外登记_V1.0.md`，包含影响边界、补偿控制、Owner
 与到期日。项目范围、架构红线与 Definition of Done 以根目录

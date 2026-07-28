@@ -560,8 +560,11 @@ API 创建业务记录与 OutboxEvent
   AI Canary 已拒绝公网 Runner，限定 VPC 内临时 Runner；Terraform 固定创建跨区、
   删除保护的公网 CLB 与 80/443 安全组，Kubernetes Staging Overlay 复用该 CLB，通过
   既有证书 ID 建立 HTTPS 和 307 重定向，发布前校验 Controller 版本、服务端 Dry-run、
-  CLB/DNS 绑定、证书信任、HSTS 与健康探针。真实 Plan/Apply、临时 Runner、DNS/证书
-  绑定、云上连通性和成本复核仍待账号、域名、证书与审批。
+  CLB/DNS 绑定、证书信任、HSTS 与健康探针；部署后只读审计工作流仅从 State 导出
+  非敏感白名单合同，以 Kubernetes `get`、依赖 Readiness 和公网 TLS/DNS 证据核对
+  跨区节点、不可变 SHA、数据层、固定 CLB 和 307，并只归档不含资源 ID/VIP/Context/
+  Secret 的 `0600` 脱敏报告。真实 Plan/Apply、临时 Runner、首次审计、DNS/证书绑定、
+  云上连通性和成本复核仍待账号、域名、证书与审批。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
   含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
   过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。
