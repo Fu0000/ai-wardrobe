@@ -3,6 +3,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import StateCard from "@/components/StateCard.vue";
 import { feedbackPageUrl } from "@/lib/navigation";
 import { type Occasion } from "@/services/diagnoses";
 import { useDiagnosisStore } from "@/stores/diagnoses";
@@ -90,16 +91,25 @@ onShow(refresh);
       </view>
     </header>
 
-    <view v-if="refreshing && !result" class="state-card">
-      <text class="state-card__mark">…</text>
-      <text>正在恢复诊断结果</text>
-    </view>
+    <StateCard
+      v-if="refreshing && !result"
+      kind="loading"
+      density="spacious"
+      spacing="inset"
+      mark="…"
+      message="正在恢复诊断结果"
+    />
 
-    <view v-else-if="errorMessage && !result" class="state-card state-card--error">
-      <text class="state-card__mark">!</text>
-      <text>{{ errorMessage }}</text>
-      <button class="state-card__action" @click="refresh">重新加载</button>
-    </view>
+    <StateCard
+      v-else-if="errorMessage && !result"
+      kind="error"
+      density="spacious"
+      spacing="inset"
+      mark="!"
+      :message="errorMessage"
+      action-label="重新加载"
+      @action="refresh"
+    />
 
     <main v-else-if="result" class="result-content">
       <section class="result-section strengths">
@@ -247,42 +257,6 @@ onShow(refresh);
     color: rgba($color-white, 0.52);
     font-size: 20rpx;
     font-weight: 400;
-  }
-}
-
-.state-card {
-  display: grid;
-  gap: 22rpx;
-  justify-items: center;
-  margin: 48rpx 32rpx;
-  padding: 72rpx 32rpx;
-  border: 1rpx solid rgba($color-ink, 0.1);
-  border-radius: $radius-large;
-  color: $color-muted;
-  font-size: 24rpx;
-  text-align: center;
-
-  &__mark {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 70rpx;
-    height: 70rpx;
-    border-radius: 50%;
-    background: $color-paper-deep;
-    color: $color-vermilion;
-    font-family: "Songti SC", serif;
-    font-size: 32rpx;
-  }
-
-  &__action {
-    min-width: 220rpx;
-    height: 88rpx;
-    border-radius: 999rpx;
-    background: $color-ink;
-    color: $color-white;
-    font-size: 23rpx;
-    line-height: 88rpx;
   }
 }
 

@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import ProgressTrack from "@/components/ProgressTrack.vue";
 import { useJobPolling } from "@/composables/useJobPolling";
 import { useDeletionStore } from "@/stores/deletion";
 
@@ -126,9 +127,7 @@ const startFresh = () => {
         </view>
         <text class="status-card__value">{{ progress }}%</text>
       </view>
-      <view class="progress-track">
-        <view class="progress-track__fill" :style="{ width: `${progress}%` }" />
-      </view>
+      <ProgressTrack :value="progress" label="账户删除进度" />
       <text class="status-card__copy">
         {{ current?.user_message || "删除请求已保留，正在读取状态。" }}
       </text>
@@ -322,20 +321,6 @@ const startFresh = () => {
     color: $color-muted;
     font-size: 21rpx;
     line-height: 1.65;
-  }
-}
-
-.progress-track {
-  height: 9rpx;
-  margin-top: 28rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: $color-paper-deep;
-
-  &__fill {
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, $color-sage, $color-vermilion);
   }
 }
 

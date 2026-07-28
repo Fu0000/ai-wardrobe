@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
 
+import ProgressTrack from "@/components/ProgressTrack.vue";
 import { useJobPolling } from "@/composables/useJobPolling";
 import { presentJobStage } from "@/lib/job-progress";
 import { type Job } from "@/services/jobs";
@@ -107,12 +108,11 @@ const openJob = (job: Job) => {
         <text class="task-card__label">{{
           job.user_message || presentJobStage(job.status).label
         }}</text>
-        <view class="progress-track">
-          <view
-            class="progress-track__fill"
-            :style="{ width: `${job.progress}%` }"
-          />
-        </view>
+        <ProgressTrack
+          :value="job.progress"
+          :label="`${taskTypeLabel(job.task_type)}进度 ${job.progress}%`"
+          size="compact"
+        />
       </button>
     </view>
 
@@ -247,17 +247,4 @@ const openJob = (job: Job) => {
   }
 }
 
-.progress-track {
-  height: 8rpx;
-  margin-top: 28rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: $color-paper-deep;
-
-  &__fill {
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, $color-sage, $color-vermilion);
-  }
-}
 </style>

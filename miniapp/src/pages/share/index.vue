@@ -8,6 +8,7 @@ import {
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import StateCard from "@/components/StateCard.vue";
 import {
   parseWechatAttributionSource,
   shareLandingPath,
@@ -99,11 +100,22 @@ onShareTimeline(() => {
       <text class="heading__copy">这是 AI 辅助编辑的穿搭对比，人物与未修改部分应保持一致。</text>
     </header>
 
-    <view v-if="refreshing && !share" class="state-card">正在打开分享…</view>
-    <view v-else-if="errorMessage && !share" class="state-card state-card--error">
-      <text>{{ errorMessage }}</text>
-      <button @click="refresh">重新加载</button>
-    </view>
+    <StateCard
+      v-if="refreshing && !share"
+      kind="loading"
+      tone="dark"
+      spacing="section"
+      message="正在打开分享…"
+    />
+    <StateCard
+      v-else-if="errorMessage && !share"
+      kind="error"
+      tone="dark"
+      spacing="section"
+      :message="errorMessage"
+      action-label="重新加载"
+      @action="refresh"
+    />
 
     <main v-else-if="share?.status === 'ACTIVE' && share.card_url">
       <section class="card-stage">
@@ -164,10 +176,14 @@ onShareTimeline(() => {
       <text class="privacy-copy">你看到的是独立分享卡片，无法访问分享者的原始照片或账号资料。</text>
     </main>
 
-    <view v-else-if="share" class="state-card">
-      <text>{{ share.user_message || "分享卡片仍在准备中。" }}</text>
-      <button @click="refresh">刷新状态</button>
-    </view>
+    <StateCard
+      v-else-if="share"
+      tone="dark"
+      spacing="section"
+      :message="share.user_message || '分享卡片仍在准备中。'"
+      action-label="刷新状态"
+      @action="refresh"
+    />
   </view>
 </template>
 
@@ -207,25 +223,6 @@ onShareTimeline(() => {
     color: rgba($color-white, 0.62);
     font-size: 21rpx;
     line-height: 1.65;
-  }
-}
-
-.state-card {
-  display: grid;
-  gap: 20rpx;
-  margin-top: 42rpx;
-  padding: 60rpx 32rpx;
-  border: 1rpx solid rgba($color-white, 0.14);
-  border-radius: $radius-large;
-  color: rgba($color-white, 0.7);
-  text-align: center;
-
-  button {
-    height: 84rpx;
-    border-radius: 999rpx;
-    background: $color-vermilion;
-    color: $color-white;
-    line-height: 84rpx;
   }
 }
 

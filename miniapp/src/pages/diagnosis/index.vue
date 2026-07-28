@@ -3,6 +3,7 @@ import { onLoad } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
+import ProgressTrack from "@/components/ProgressTrack.vue";
 import { useJobPolling } from "@/composables/useJobPolling";
 import { presentJobStage } from "@/lib/job-progress";
 import { useAssetStore } from "@/stores/assets";
@@ -106,16 +107,13 @@ onLoad((query) => {
       <text class="progress-card__label">{{
         current?.user_message || presentation.label
       }}</text>
-      <view
+      <ProgressTrack
         v-if="!isFinalFailure"
-        class="progress-track"
-        :aria-label="`诊断进度 ${presentation.progress}%`"
-      >
-        <view
-          class="progress-track__fill"
-          :style="{ width: `${presentation.progress}%` }"
-        />
-      </view>
+        :value="presentation.progress"
+        :label="`诊断进度 ${presentation.progress}%`"
+        size="prominent"
+        tone="contrast"
+      />
 
       <view class="stage-list">
         <view
@@ -260,21 +258,6 @@ onLoad((query) => {
     color: $color-ink;
     font-size: 28rpx;
     font-weight: 700;
-  }
-}
-
-.progress-track {
-  height: 12rpx;
-  margin-top: 28rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: $color-paper-deep;
-
-  &__fill {
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, $color-sage-deep, $color-vermilion);
-    transition: width 360ms ease;
   }
 }
 

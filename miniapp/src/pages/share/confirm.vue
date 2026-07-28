@@ -7,6 +7,7 @@ import {
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
+import ProgressTrack from "@/components/ProgressTrack.vue";
 import { useJobPolling } from "@/composables/useJobPolling";
 import {
   shareLandingPath,
@@ -165,12 +166,12 @@ onLoad((query) => {
       <text class="generation-card__copy">
         {{ share.user_message || "通常只需要几秒；离开页面也不会中断。" }}
       </text>
-      <view class="progress-track">
-        <view
-          class="progress-track__fill"
-          :style="{ width: `${share.job_status === 'QUALITY_CHECKING' ? 86 : 48}%` }"
-        />
-      </view>
+      <ProgressTrack
+        :value="share.job_status === 'QUALITY_CHECKING' ? 86 : 48"
+        label="分享卡片生成进度"
+        size="compact"
+        spacing="loose"
+      />
       <button class="cancel-action" @click="cancel">先离开</button>
     </section>
 
@@ -354,22 +355,6 @@ onLoad((query) => {
 
   &--error .generation-card__mark {
     background: rgba($color-vermilion, 0.12);
-  }
-}
-
-.progress-track {
-  width: 100%;
-  height: 8rpx;
-  margin-top: 32rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: $color-paper-deep;
-
-  &__fill {
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, $color-sage, $color-vermilion);
-    transition: width 300ms ease;
   }
 }
 

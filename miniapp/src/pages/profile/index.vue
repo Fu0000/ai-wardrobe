@@ -2,6 +2,7 @@
 import { onLoad } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 
+import StateCard from "@/components/StateCard.vue";
 import {
   buildProfilePayload,
   canEditProfile,
@@ -118,18 +119,24 @@ onLoad(() => {
       <text class="subtitle">你可以随时修改昵称，或撤回 AI 处理授权。</text>
     </header>
 
-    <view v-if="loadState === 'loading'" class="state-card">
-      <text>正在加载个人设置…</text>
-    </view>
+    <StateCard
+      v-if="loadState === 'loading'"
+      kind="loading"
+      surface="raised"
+      density="compact"
+      message="正在加载个人设置…"
+    />
 
-    <view v-else-if="canRetryLoad" class="state-card state-card--error">
-      <text class="state-card__mark">!</text>
-      <text>{{ errorMessage ?? "个人资料加载失败。" }}</text>
-      <text class="state-card__note">
-        为避免误改你的授权状态，加载成功后才能修改设置。
-      </text>
-      <button class="state-card__action" @click="loadProfile">重新加载</button>
-    </view>
+    <StateCard
+      v-else-if="canRetryLoad"
+      kind="error"
+      surface="raised"
+      mark="!"
+      :message="errorMessage ?? '个人资料加载失败。'"
+      note="为避免误改你的授权状态，加载成功后才能修改设置。"
+      action-label="重新加载"
+      @action="loadProfile"
+    />
 
     <main v-else-if="canEdit" class="settings-card">
       <label class="field">
@@ -248,55 +255,11 @@ onLoad(() => {
   line-height: 1.6;
 }
 
-.state-card,
 .settings-card {
   border: 1rpx solid rgba($color-ink, 0.08);
   border-radius: $radius-large;
   background: rgba($color-white, 0.94);
   box-shadow: $shadow-soft;
-}
-
-.state-card {
-  padding: 48rpx 32rpx;
-  color: $color-muted;
-  font-size: 24rpx;
-
-  &--error {
-    display: grid;
-    gap: 20rpx;
-    justify-items: center;
-    padding: 64rpx 32rpx;
-    text-align: center;
-  }
-
-  &__mark {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 70rpx;
-    height: 70rpx;
-    border-radius: 50%;
-    background: $color-paper-deep;
-    color: $color-vermilion;
-    font-family: "Songti SC", serif;
-    font-size: 32rpx;
-  }
-
-  &__note {
-    color: $color-muted;
-    font-size: 20rpx;
-    line-height: 1.6;
-  }
-
-  &__action {
-    min-width: 220rpx;
-    height: 88rpx;
-    border-radius: 999rpx;
-    background: $color-ink;
-    color: $color-white;
-    font-size: 23rpx;
-    line-height: 88rpx;
-  }
 }
 
 .settings-card {

@@ -3,6 +3,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
+import StateCard from "@/components/StateCard.vue";
 import { useOptimizationStore } from "@/stores/optimizations";
 
 const optimizations = useOptimizationStore();
@@ -96,30 +97,44 @@ onShow(refresh);
       </view>
     </header>
 
-    <view v-if="refreshing && !result" class="state-card">正在恢复优化结果…</view>
-    <view v-else-if="errorMessage && !result" class="state-card state-card--error">
-      <text>{{ errorMessage }}</text>
-      <button @click="refresh">重新加载</button>
-    </view>
-    <view
+    <StateCard
+      v-if="refreshing && !result"
+      kind="loading"
+      tone="dark"
+      spacing="section"
+      message="正在恢复优化结果…"
+    />
+    <StateCard
+      v-else-if="errorMessage && !result"
+      kind="error"
+      tone="dark"
+      spacing="section"
+      :message="errorMessage"
+      action-label="重新加载"
+      @action="refresh"
+    />
+    <StateCard
       v-else-if="result && result.job_status !== 'COMPLETED'"
-      class="state-card"
-    >
-      <text>这项优化仍在后台处理中。</text>
-      <button @click="openProgress">查看生成进度</button>
-    </view>
-    <view
+      tone="dark"
+      spacing="section"
+      message="这项优化仍在后台处理中。"
+      action-label="查看生成进度"
+      @action="openProgress"
+    />
+    <StateCard
       v-else-if="
         result &&
         (!result.before_image_url ||
           !result.after_image_url ||
           !result.quality_passed)
       "
-      class="state-card state-card--error"
-    >
-      <text>这次结果没有通过一致性检查，不会向你展示。</text>
-      <button @click="openProgress">返回任务详情</button>
-    </view>
+      kind="error"
+      tone="dark"
+      spacing="section"
+      message="这次结果没有通过一致性检查，不会向你展示。"
+      action-label="返回任务详情"
+      @action="openProgress"
+    />
 
     <main
       v-else-if="
@@ -267,26 +282,6 @@ onShow(refresh);
 
   text:first-child {
     font-size: 28rpx;
-  }
-}
-
-.state-card {
-  display: grid;
-  gap: 20rpx;
-  margin-top: 48rpx;
-  padding: 60rpx 30rpx;
-  border: 1rpx solid rgba($color-white, 0.14);
-  border-radius: $radius-large;
-  color: rgba($color-white, 0.7);
-  font-size: 23rpx;
-  text-align: center;
-
-  button {
-    height: 88rpx;
-    border-radius: 999rpx;
-    background: $color-vermilion;
-    color: $color-white;
-    line-height: 88rpx;
   }
 }
 
