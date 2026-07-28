@@ -140,11 +140,26 @@
 
 ### GATE-01 埋点体系（阻断全部功能的 Done 判定）
 
-**证据**：`docs/15` 第四节定义 19 个核心事件，代码仅实现 4 个（`share.asset.created`、`share.scene.opened`、`vote.choice.submitted`、`growth.continue.clicked`）。`miniapp/src` 无任何上报模块；`backend/app/modules/events/` 只有 `dispatcher.py`、`models.py`、`repository.py`，**无 `api.py`**，即无客户端事件接收端点。`user_events` 表缺 `docs/15` 第三节强制的 9 个公共字段。
+**当前证据（2026-07-28）**：`docs/15` 第四节实际列出 20 个核心事件，现已全部接入。
+后端已提供 `POST /api/v1/client-events` 批量端点、事件 ID 幂等、关联实体 Ownership
+校验、20 条批量上限与严格判别联合 Schema；`user_events` 已补齐版本、发生时间、
+环境、Trace、Request、HMAC 用户哈希、Session、客户端版本、平台和渠道。小程序已
+实现 100 条持久队列、20 条批量、指数退避、单飞发送、回执校验、永久坏事件二分
+隔离和首屏去重，并接入上传、诊断结果/CTA、优化对比页。登录、上传完成、诊断/优化
+创建与终态、Growth、删除请求与完成均在服务端事务中幂等记录；真实 PostgreSQL
+集成测试覆盖公共字段、跨用户关联拒绝、重复上报、Worker 重复完成和账号清理后的
+完成事件保留。
 
-**影响**：`docs/15` 第五节三条核心漏斗全部断裂，第八节验收口径下所有 MVP 功能均不满足 Done。这是当前工作量最大、阻断面最广的单项。
+`make event-funnel-audit` 已提供 20 事件覆盖、三条漏斗、环境隔离、公共字段和禁止数据
+审计；本地证据 `infra/operations/evidence/2026-07-28_local_event_funnel_audit.md`
+为 `BASELINE_NO_DATA`，无违规但无真实旅程流量。因此代码侧已完成，GATE-01 仍为
+`IN_PROGRESS`：必须在 Staging 用授权测试账号跑通三条旅程，并以
+`--require-complete --require-correlated-context` 得到 `PASSED` 报告后才能关闭。
 
-**方案**：
+**剩余影响**：代码链路不再断裂，但缺少 Staging 授权流量时无法证明事件可达性、
+环境隔离和真实转化口径；按 `docs/15` 第八节仍不能把相关功能判为 Done。
+
+**已实施方案**：
 
 1. 后端新增 `POST /client-events` 批量接收端点，按 `event_id` 幂等去重，服务端补全 `trace_id`、`request_id`、`environment`、`user_id_hash`。
 2. `user_events` 迁移补齐公共字段。

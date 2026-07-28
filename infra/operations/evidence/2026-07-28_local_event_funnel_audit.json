@@ -1,0 +1,168 @@
+{
+  "context_violations": [],
+  "environment_counts": {},
+  "event_counts": {
+    "asset.upload.completed": 0,
+    "asset.upload.interrupted": 0,
+    "asset.upload.started": 0,
+    "auth.wechat.succeeded": 0,
+    "consent.ai.accepted": 0,
+    "consent.ai.revoked": 0,
+    "diagnosis.job.created": 0,
+    "diagnosis.optimization.clicked": 0,
+    "diagnosis.result.viewed": 0,
+    "diagnosis.text.completed": 0,
+    "growth.continue.clicked": 0,
+    "optimization.before_after.viewed": 0,
+    "optimization.job.created": 0,
+    "optimization.result.completed": 0,
+    "privacy.deletion.completed": 0,
+    "privacy.deletion.requested": 0,
+    "share.asset.created": 0,
+    "share.scene.opened": 0,
+    "share.wechat.invoked": 0,
+    "vote.choice.submitted": 0
+  },
+  "funnels": {
+    "first_value": [
+      {
+        "event_count": 0,
+        "event_name": "auth.wechat.succeeded",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "asset.upload.completed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "diagnosis.job.created",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "diagnosis.text.completed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "diagnosis.result.viewed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      }
+    ],
+    "growth": [
+      {
+        "event_count": 0,
+        "event_name": "optimization.before_after.viewed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "share.wechat.invoked",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "share.scene.opened",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "vote.choice.submitted",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "growth.continue.clicked",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      }
+    ],
+    "optimization": [
+      {
+        "event_count": 0,
+        "event_name": "diagnosis.result.viewed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "diagnosis.optimization.clicked",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "optimization.job.created",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "optimization.result.completed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      },
+      {
+        "event_count": 0,
+        "event_name": "optimization.before_after.viewed",
+        "subject_conversion_from_previous_percent": null,
+        "unique_subjects": 0
+      }
+    ]
+  },
+  "generated_at": "2026-07-28T09:08:23.275718+00:00",
+  "notes": [
+    "Growth 漏斗跨分享者与好友，subject 转化率是聚合观察值，不代表同一用户序列。",
+    "报告仅输出违规字段路径，不回显疑似敏感值。"
+  ],
+  "privacy_violations": [],
+  "requirements": {
+    "require_complete": false,
+    "require_correlated_context": false
+  },
+  "schema_version": 1,
+  "status": "BASELINE_NO_DATA",
+  "summary": {
+    "covered_core_event_count": 0,
+    "event_count": 0,
+    "failures": [],
+    "missing_core_events": [
+      "auth.wechat.succeeded",
+      "consent.ai.accepted",
+      "consent.ai.revoked",
+      "asset.upload.started",
+      "asset.upload.interrupted",
+      "asset.upload.completed",
+      "diagnosis.job.created",
+      "diagnosis.text.completed",
+      "diagnosis.result.viewed",
+      "diagnosis.optimization.clicked",
+      "optimization.job.created",
+      "optimization.result.completed",
+      "optimization.before_after.viewed",
+      "share.asset.created",
+      "share.wechat.invoked",
+      "share.scene.opened",
+      "vote.choice.submitted",
+      "growth.continue.clicked",
+      "privacy.deletion.requested",
+      "privacy.deletion.completed"
+    ],
+    "required_core_event_count": 20
+  },
+  "window": {
+    "environment": "local",
+    "hours": 24
+  }
+}

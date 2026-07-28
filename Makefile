@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill staging-smoke
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill event-funnel-audit staging-smoke
 
 install: backend-install frontend-install
 
@@ -58,6 +58,9 @@ local-db-drill:
 
 local-alert-drill:
 	./scripts/ops/local-alert-drill.sh
+
+event-funnel-audit:
+	cd backend && uv run python scripts/event_funnel_audit.py $(EVENT_AUDIT_ARGS)
 
 staging-smoke:
 	STAGING_API_BASE_URL="$(STAGING_API_BASE_URL)" SMOKE_IMAGE="$(SMOKE_IMAGE)" ./scripts/staging-smoke.sh
