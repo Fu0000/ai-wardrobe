@@ -77,6 +77,47 @@ This local drill deliberately does not claim notification delivery. Before Stagi
 
 `REL-005` and `OBS-02` remain incomplete until that Staging delivery evidence exists.
 
+## Staging security and signed URL audit
+
+Prepare two dedicated Staging users. The Owner must own one READY source Asset and its related
+Job, Diagnosis and Optimization; the Attacker must not own any of them. Do not use production users
+or place tokens and signed URLs in files, arguments, screenshots or committed reports.
+
+Inject both tokens and the resource IDs through environment variables. The explicit expiry
+confirmation is required because the command waits until the real COS URL expires:
+
+```bash
+export STAGING_API_BASE_URL='https://staging.example.com'
+export SECURITY_EXPECTED_ASSET_HOST='private-bucket.cos.ap-shanghai.myqcloud.com'
+export SECURITY_OWNER_ASSET_ID='<owner asset UUID>'
+export SECURITY_OWNER_JOB_ID='<owner job UUID>'
+export SECURITY_OWNER_DIAGNOSIS_ID='<owner diagnosis UUID>'
+export SECURITY_OWNER_OPTIMIZATION_ID='<owner optimization UUID>'
+export AIW_SECURITY_OWNER_ACCESS_TOKEN='<owner token>'
+export AIW_SECURITY_ATTACKER_ACCESS_TOKEN='<attacker token>'
+export AIW_SECURITY_WAIT_FOR_EXPIRY='I_ACCEPT_WAIT_FOR_SIGNED_URL_EXPIRY'
+make staging-security-audit
+unset STAGING_API_BASE_URL SECURITY_EXPECTED_ASSET_HOST
+unset SECURITY_OWNER_ASSET_ID SECURITY_OWNER_JOB_ID
+unset SECURITY_OWNER_DIAGNOSIS_ID SECURITY_OWNER_OPTIMIZATION_ID
+unset AIW_SECURITY_OWNER_ACCESS_TOKEN AIW_SECURITY_ATTACKER_ACCESS_TOKEN
+unset AIW_SECURITY_WAIT_FOR_EXPIRY
+```
+
+The audit fails closed unless:
+
+- Owner reads for Asset, Job, Diagnosis and Optimization all return 200;
+- Attacker reads of Owner resources are indistinguishable from random absent resources and return
+  the resource-specific 404 code;
+- every API response includes Request ID and Trace ID;
+- the returned Signed URL uses HTTPS and exactly the approved COS hostname;
+- the URL is readable before expiry and returns 401/403/404 after its server-declared expiry.
+
+Terminal output records only check names, status codes, durations, TTL and boolean correlation
+signals. It never records tokens, resource IDs or the Signed URL. `AST-003` and the
+Security/Privacy Release Gate still require actual execution evidence and COS object-deletion
+verification; the script alone is not a pass.
+
 ## AI model Canary and rollback
 
 The Staging workflow `AI Canary Staging` uses a deterministic hash of internal User ID to select a sticky 0/10/50/100% cohort. Candidate identifiers are non-secret ConfigMap values. Every newly created AI Job persists its resolved routes, timeout, cost ceiling, quality threshold, release track and optimization attempt limit.

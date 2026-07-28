@@ -490,7 +490,7 @@ API 创建业务记录与 OutboxEvent
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
 - W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
-  78 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
+  79 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
   Agent 执行入口。
 - W6 文档治理证据：00～08 文档文件名与 V1.1 正文已统一；P0 队列、模块路径、资源归属
   语义和 INF-04 能力边界已按代码事实校正；自动门禁验证 80 个唯一 WBS 任务与
@@ -505,6 +505,9 @@ API 创建业务记录与 OutboxEvent
   真实 PostgreSQL API 矩阵进一步验证外来资源与随机不存在资源返回相同 404，
   外来 Asset/Job 写引用不会产生 Job、Deletion 或 Feedback 副作用，Owner 正向访问和
   列表隔离保持可用；
+  `make staging-security-audit` 已固化 Owner/Attacker 双账号正反向检查、Signed URL
+  精确主机白名单、有效期内读取与真实过期后拒绝，敏感 Token、资源 UUID 和签名 URL
+  均不进入报告；
   Python/小程序依赖漏洞执行强制门禁；全部第三方
   GitHub Actions 固定完整 Commit SHA，并由 Dependabot 周期更新。
 - W6 QA/治理证据：Bug 分级、34 项核心验收用例、三类微信真机矩阵、Release Gate、Go/No-Go 决策规则、发布观察和回滚清单已形成独立可签署文档。

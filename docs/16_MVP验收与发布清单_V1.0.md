@@ -129,6 +129,16 @@ unset AIW_SMOKE_ACCESS_TOKEN
 
 脚本默认在验收结束后发起单图删除并等待闭包清理。JSON 报告不得包含 Access Token、签名 URL 或照片内容。
 
+Staging 双账号资源隔离与 Signed URL 真实过期必须通过独立安全审计；两个 Token 和四个
+Owner 资源 ID 均只经环境变量注入，命令与变量清单见 `infra/operations/README.md`：
+
+```bash
+make staging-security-audit
+```
+
+该命令会等待 Signed URL 的服务器声明有效期结束，不得通过缩短本地时钟或复用 Mock
+结果绕过。报告不得包含 Token、资源 UUID 或签名 URL。
+
 ## 六、发布 Gate
 
 | Gate | `GO` 标准 | 当前状态（2026-07-28） |

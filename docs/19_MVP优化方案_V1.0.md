@@ -316,6 +316,25 @@ Diagnosis 并发、图片队列积压与恢复、Queue Drain Time、额度/Job/D
 Dashboard 资源水位和低端安卓体验后，才能将 `TST-03` 与 Performance Gate 转为
 `DONE/PASS`。
 
+### GATE-08 Staging Security/Privacy 审计
+
+状态：**自动化入口已完成；真实 COS 执行仍受 Staging 与双账号凭据阻塞。**
+
+`make staging-security-audit` 使用两个仅经环境变量注入且必须不同的 Token，对 Owner
+的 Asset、Job、Diagnosis、Optimization 执行正向 200 控制，并验证 Attacker 读取与
+随机不存在资源返回完全一致的资源级 404。所有响应必须包含 Request ID 与 Trace ID。
+Asset Access URL 还需满足 HTTPS、精确 COS Host 白名单、5～900 秒 TTL，在有效期内
+可读，并在服务器声明过期时间加宽限后返回 401/403/404；脚本显式要求等待确认且最长
+等待受限，不能以本地 Mock 冒充真实过期。
+
+输出只包含检查名、状态码、耗时、TTL 和关联头布尔值，不记录 Token、资源 UUID、
+Staging URL、COS Host 或 Signed URL。3 个 MockTransport 测试覆盖安全来源/Host
+拒绝、完整成功链路与 Attacker 可读时失败关闭；Shell 入口语法也进入 CI。
+
+剩余验收是用专用 Staging Owner/Attacker 和真实私有 COS 运行并归档脱敏输出，同时
+完成对象删除后的不可访问检查及授权 Prompt Injection Eval。未取得这些证据前，
+AST-06、TST-04 与 Security/Privacy Release Gate 不转为 `DONE/PASS`。
+
 ## 六、P2 优化项（架构债）
 
 ### ARCH-01 抽取 Job 执行骨架

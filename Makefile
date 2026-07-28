@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline event-funnel-audit staging-smoke
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline event-funnel-audit staging-smoke staging-security-audit
 
 install: backend-install frontend-install
 
@@ -67,3 +67,6 @@ event-funnel-audit:
 
 staging-smoke:
 	STAGING_API_BASE_URL="$(STAGING_API_BASE_URL)" SMOKE_IMAGE="$(SMOKE_IMAGE)" ./scripts/staging-smoke.sh
+
+staging-security-audit:
+	./scripts/security/staging-security-audit.sh
