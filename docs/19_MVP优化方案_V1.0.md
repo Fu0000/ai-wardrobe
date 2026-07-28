@@ -221,28 +221,33 @@ Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
 - CI 已监听 `main`、`develop` 与 Pull Request，启动 PostgreSQL、Redis，并设置
-  `AIW_RUN_INTEGRATION_TESTS=1`；当前 24 个集成测试可实际执行。远端
+  `AIW_RUN_INTEGRATION_TESTS=1`；当前 36 个集成测试可实际执行。远端
   [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 的 Backend
   与 Miniapp Job 均已通过。
 - `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
-  耗尽退款；其余 Executor 的领域内直接行为仍待补齐。
+  耗尽退款；`OptimizationExecutor` 覆盖成功幂等事件和失败退款，`ShareAssetExecutor`
+  覆盖派生资产/事件事务完成、幂等和失败 Token Fencing，`DeletionExecutor` 覆盖账号及
+  单图删除闭包、完成事件与重复执行隔离。
 - 四个 Celery 业务任务已有 9 个单元测试，覆盖有界退避、重试耗尽、同一执行 Token 传递、
   late ack、Worker 丢失重投和队列隔离配置。
 - `QuotaRepository.reserve/commit/release` 已有 12 个真实实现测试；账号删除闭包、过期任务
   回收与端点级 401 拒绝也已覆盖。
-- 剩余缺口是小程序页面与 services 组件测试。
+- 36 个 PostgreSQL/Redis 集成测试已在本地容器全量实际执行并通过；剩余缺口是小程序
+  页面与其余 services 的交互测试。
 
-**影响**：后端直接管额度的主路径已有防回归证据；剩余风险集中在 Optimization、Share、
-Deletion Executor 的领域内状态转换，以及小程序页面交互回归。
+**影响**：后端四类 Executor 的关键事务、租约与额度路径已有防回归证据；剩余风险集中
+在小程序页面交互和尚未单测的 service wrapper。
 
 **方案**：
 
 1. DB Fixture、CI integration job、Quota、purge、回收、401 与 Celery 重试测试已落地。
-2. 继续覆盖 Optimization、Share 与 Deletion Executor 的领域直接行为。
+2. ~~继续覆盖 Optimization、Share 与 Deletion Executor 的领域直接行为。~~
+   （已完成）
 3. 小程序引入 `@vue/test-utils` 与 `@pinia/testing`（当前 `vitest.config.ts` 为
    `environment: "node"`，不具备组件测试能力）。
 
-**验收**：CI 中集成测试实际执行而非 skip；上述四类关键路径均有覆盖。
+**验收**：CI 中集成测试实际执行而非 skip；后端四类关键路径均有覆盖。GATE-04 仍待
+小程序页面与 services 测试补齐后关闭。
 
 ### GATE-05 迁移与孤儿资产
 

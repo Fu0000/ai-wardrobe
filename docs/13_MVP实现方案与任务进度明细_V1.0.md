@@ -455,12 +455,12 @@ API 创建业务记录与 OutboxEvent
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 157 个文件）、250
-  个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
+- 已验证：后端 Ruff、严格 Mypy、36 个 PostgreSQL/Redis 集成测试全量实际执行、
+  十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
-  小程序 ESLint、类型检查、61 个测试、微信构建与 High 依赖漏洞门禁。
-  其中 24 个 PostgreSQL/Redis 集成测试已纳入 CI。
-- Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 24 个集成
+  小程序 ESLint、类型检查、67 个测试、微信构建与 High 依赖漏洞门禁。
+  其中 36 个 PostgreSQL/Redis 集成测试已纳入 CI。
+- Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 36 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions

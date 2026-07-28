@@ -18,7 +18,12 @@ from app.modules.diagnosis.models import (
     StyleDiagnosis,
     StyleOptimizationResult,
 )
-from app.modules.governance.models import QuotaType
+from app.modules.governance.models import (
+    QuotaReservation,
+    QuotaReservationStatus,
+    QuotaType,
+    UsageCounter,
+)
 from app.modules.governance.quota import QuotaRepository
 from app.modules.growth.models import UserEvent
 from app.modules.identity.models import User
@@ -154,3 +159,129 @@ async def test_optimization_completion_persists_one_funnel_event(
     assert events[0].app_channel == "worker"
     assert generated_asset is not None
     assert generated_asset.user_id == user_id
+
+
+async def test_optimization_failure_is_token_fenced_and_restores_quota(
+    settings: Settings,
+    database: Database,
+    purge_users: list[UUID],
+) -> None:
+    user_id = uuid4()
+    purge_users.append(user_id)
+    job_id = uuid4()
+    execution_token = str(uuid4())
+
+    async with database.session_factory() as setup:
+        setup.add(User(id=user_id))
+        await setup.flush()
+        source_asset = UserAsset(
+            id=uuid4(),
+            user_id=user_id,
+            kind=AssetKind.USER_UPLOAD,
+            status=AssetStatus.READY,
+            bucket="integration",
+            object_key=f"users/{user_id}/optimization-failure.jpg",
+            content_type="image/jpeg",
+        )
+        setup.add(source_asset)
+        await setup.flush()
+        source_photo = SourcePhoto(
+            id=uuid4(),
+            user_id=user_id,
+            asset_id=source_asset.id,
+            purpose=PhotoPurpose.OUTFIT_DIAGNOSIS,
+        )
+        setup.add(source_photo)
+        diagnosis_job = GenerationJob(
+            id=uuid4(),
+            user_id=user_id,
+            task_type=JobTaskType.STYLE_DIAGNOSIS,
+            status=JobStatus.COMPLETED,
+            idempotency_key=f"failure-diagnosis-{uuid4().hex}",
+            request_hash="c" * 64,
+        )
+        optimization_job = GenerationJob(
+            id=job_id,
+            user_id=user_id,
+            task_type=JobTaskType.STYLE_OPTIMIZATION,
+            status=JobStatus.PROCESSING,
+            idempotency_key=f"failure-optimization-{uuid4().hex}",
+            request_hash="d" * 64,
+            execution_token=execution_token,
+            execution_lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        setup.add_all([diagnosis_job, optimization_job])
+        await setup.flush()
+        diagnosis = StyleDiagnosis(
+            id=uuid4(),
+            user_id=user_id,
+            source_photo_id=source_photo.id,
+            job_id=diagnosis_job.id,
+            occasion="DAILY",
+            status=DiagnosisStatus.COMPLETED,
+        )
+        setup.add(diagnosis)
+        await setup.flush()
+        setup.add(
+            StyleOptimizationResult(
+                id=uuid4(),
+                user_id=user_id,
+                diagnosis_id=diagnosis.id,
+                job_id=job_id,
+                status=OptimizationStatus.PENDING,
+                change_level=1,
+                change_summary=[],
+            )
+        )
+        await QuotaRepository(setup).reserve(
+            user_id=user_id,
+            job_id=job_id,
+            quota_type=QuotaType.OPTIMIZATION,
+        )
+        await setup.commit()
+
+    executor = OptimizationExecutor(settings=settings, database=database)
+    assert (
+        await executor.finalize_failure(
+            job_id,
+            code="STALE_OPTIMIZATION_WORKER",
+            user_message="不应写入",
+            expected_execution_token=str(uuid4()),
+        )
+        is False
+    )
+    assert (
+        await executor.finalize_failure(
+            job_id,
+            code="OPTIMIZATION_RETRY_EXHAUSTED",
+            user_message="优化未完成，免费次数已退回。",
+            expected_execution_token=execution_token,
+        )
+        is True
+    )
+
+    async with database.session_factory() as verify:
+        job = await verify.get(GenerationJob, job_id)
+        optimization = (
+            await verify.execute(
+                select(StyleOptimizationResult).where(StyleOptimizationResult.job_id == job_id)
+            )
+        ).scalar_one()
+        reservation = (
+            await verify.execute(select(QuotaReservation).where(QuotaReservation.job_id == job_id))
+        ).scalar_one()
+        counters = list(
+            (
+                await verify.execute(select(UsageCounter).where(UsageCounter.user_id == user_id))
+            ).scalars()
+        )
+
+    assert job is not None
+    assert job.status is JobStatus.FAILED_FINAL
+    assert job.error_code == "OPTIMIZATION_RETRY_EXHAUSTED"
+    assert job.execution_token is None
+    assert optimization.status is OptimizationStatus.FAILED
+    assert reservation.status is QuotaReservationStatus.RELEASED
+    assert counters
+    assert all(counter.reserved == 0 for counter in counters)
+    assert all(counter.used == 0 for counter in counters)
