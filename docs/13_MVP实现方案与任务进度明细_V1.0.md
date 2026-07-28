@@ -454,8 +454,8 @@ API 创建业务记录与 OutboxEvent
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 在
-  `develop@613a86a` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30336655337](https://github.com/Fu0000/ai-wardrobe/actions/runs/30336655337)
+  在 `develop@0bb1dde` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、

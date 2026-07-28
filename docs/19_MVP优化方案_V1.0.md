@@ -286,7 +286,9 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 
 新增 4 个单元测试，覆盖 Critic 先非法后合法时采用正确模型版本、连续两次非法响应、
 无效生成图报告，以及编程异常终态退款并显式失败。后端 Ruff、严格 Mypy、250 个
-单元/契约/真实 PostgreSQL/Redis 测试与 Alembic 模型漂移检查全部通过。
+单元/契约/真实 PostgreSQL/Redis 测试与 Alembic 模型漂移检查全部通过；远端
+[CI run 30336655337](https://github.com/Fu0000/ai-wardrobe/actions/runs/30336655337)
+的 Backend 与 Miniapp Job 均为 `success`。
 
 ### ARCH-03 小程序抽取组件与 Composable
 
