@@ -7,10 +7,9 @@ import {
   type Optimization,
 } from "@/services/optimizations";
 import { useAuthStore } from "@/stores/auth";
-import { useJobStore } from "@/stores/jobs";
+import { createJobBackedResourceStore } from "@/stores/job-backed-resource";
 
 const STORAGE_KEY = "aiw:optimizations:v1";
-const MAX_JOB_MAPPINGS = 20;
 
 interface PendingRequest {
   diagnosisId: string;
@@ -48,6 +47,41 @@ function safeErrorMessage(error: unknown): string {
   return "优化任务暂时无法创建，请稍后重试。";
 }
 
+const optimizationResources = createJobBackedResourceStore<
+  OptimizationState,
+  Optimization,
+  PersistedOptimizationState
+>({
+  storageKey: STORAGE_KEY,
+  resourceId: (optimization) => optimization.id,
+  jobId: (optimization) => optimization.job_id,
+  isComplete: (optimization) => optimization.job_status === "COMPLETED",
+  restore: (state, persisted) => {
+    state.activeOptimizationId = persisted.activeOptimizationId;
+    state.activeJobId = persisted.activeJobId;
+    state.recentOptimizationId = persisted.recentOptimizationId;
+    state.optimizationIdsByJob = persisted.optimizationIdsByJob ?? {};
+    state.pendingRequest = persisted.pendingRequest ?? null;
+  },
+  serialize: (state) => ({
+    activeOptimizationId: state.activeOptimizationId,
+    activeJobId: state.activeJobId,
+    recentOptimizationId: state.recentOptimizationId,
+    optimizationIdsByJob: state.optimizationIdsByJob,
+    pendingRequest: state.pendingRequest,
+  }),
+  activeResourceId: (state, resourceId) => {
+    state.activeOptimizationId = resourceId;
+  },
+  recentResourceId: (state, resourceId) => {
+    state.recentOptimizationId = resourceId;
+  },
+  resourceIdsByJob: (state) => state.optimizationIdsByJob,
+  updateResourceIdsByJob: (state, resourceIdsByJob) => {
+    state.optimizationIdsByJob = resourceIdsByJob;
+  },
+});
+
 export const useOptimizationStore = defineStore("optimizations", {
   state: (): OptimizationState => ({
     activeOptimizationId: null,
@@ -63,17 +97,7 @@ export const useOptimizationStore = defineStore("optimizations", {
   }),
   actions: {
     hydrate() {
-      const persisted = uni.getStorageSync(STORAGE_KEY) as
-        | PersistedOptimizationState
-        | "";
-      if (!persisted) {
-        return;
-      }
-      this.activeOptimizationId = persisted.activeOptimizationId;
-      this.activeJobId = persisted.activeJobId;
-      this.recentOptimizationId = persisted.recentOptimizationId;
-      this.optimizationIdsByJob = persisted.optimizationIdsByJob ?? {};
-      this.pendingRequest = persisted.pendingRequest;
+      optimizationResources.hydrate(this);
     },
     async create(
       diagnosisId: string,
@@ -152,34 +176,13 @@ export const useOptimizationStore = defineStore("optimizations", {
       }
     },
     accept(optimization: Optimization) {
-      this.current = optimization;
-      this.activeOptimizationId = optimization.id;
-      this.activeJobId = optimization.job_id;
-      this.optimizationIdsByJob = {
-        [optimization.job_id]: optimization.id,
-        ...this.optimizationIdsByJob,
-      };
-      this.optimizationIdsByJob = Object.fromEntries(
-        Object.entries(this.optimizationIdsByJob).slice(0, MAX_JOB_MAPPINGS),
-      );
-      if (optimization.job_status === "COMPLETED") {
-        this.recentOptimizationId = optimization.id;
-      }
-      useJobStore().track(optimization.job_id);
-      this.persist();
+      optimizationResources.accept(this, optimization);
     },
     optimizationIdForJob(jobId: string): string | null {
-      return this.optimizationIdsByJob[jobId] ?? null;
+      return optimizationResources.resourceIdForJob(this, jobId);
     },
     persist() {
-      const persisted: PersistedOptimizationState = {
-        activeOptimizationId: this.activeOptimizationId,
-        activeJobId: this.activeJobId,
-        recentOptimizationId: this.recentOptimizationId,
-        optimizationIdsByJob: this.optimizationIdsByJob,
-        pendingRequest: this.pendingRequest,
-      };
-      uni.setStorageSync(STORAGE_KEY, persisted);
+      optimizationResources.persist(this);
     },
   },
 });

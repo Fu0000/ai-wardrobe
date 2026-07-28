@@ -8,10 +8,9 @@ import {
   type Occasion,
 } from "@/services/diagnoses";
 import { useAuthStore } from "@/stores/auth";
-import { useJobStore } from "@/stores/jobs";
+import { createJobBackedResourceStore } from "@/stores/job-backed-resource";
 
 const STORAGE_KEY = "aiw:diagnoses:v1";
-const MAX_JOB_MAPPINGS = 20;
 
 interface PendingRequest {
   identity: string;
@@ -50,6 +49,41 @@ function safeErrorMessage(error: unknown): string {
   return "诊断暂时无法创建，请稍后重试。";
 }
 
+const diagnosisResources = createJobBackedResourceStore<
+  DiagnosisState,
+  Diagnosis,
+  PersistedDiagnosisState
+>({
+  storageKey: STORAGE_KEY,
+  resourceId: (diagnosis) => diagnosis.id,
+  jobId: (diagnosis) => diagnosis.job_id,
+  isComplete: (diagnosis) => diagnosis.job_status === "COMPLETED",
+  restore: (state, persisted) => {
+    state.activeDiagnosisId = persisted.activeDiagnosisId;
+    state.activeJobId = persisted.activeJobId;
+    state.recentDiagnosisId = persisted.recentDiagnosisId;
+    state.diagnosisIdsByJob = persisted.diagnosisIdsByJob ?? {};
+    state.pendingRequest = persisted.pendingRequest ?? null;
+  },
+  serialize: (state) => ({
+    activeDiagnosisId: state.activeDiagnosisId,
+    activeJobId: state.activeJobId,
+    recentDiagnosisId: state.recentDiagnosisId,
+    diagnosisIdsByJob: state.diagnosisIdsByJob,
+    pendingRequest: state.pendingRequest,
+  }),
+  activeResourceId: (state, resourceId) => {
+    state.activeDiagnosisId = resourceId;
+  },
+  recentResourceId: (state, resourceId) => {
+    state.recentDiagnosisId = resourceId;
+  },
+  resourceIdsByJob: (state) => state.diagnosisIdsByJob,
+  updateResourceIdsByJob: (state, resourceIdsByJob) => {
+    state.diagnosisIdsByJob = resourceIdsByJob;
+  },
+});
+
 export const useDiagnosisStore = defineStore("diagnoses", {
   state: (): DiagnosisState => ({
     activeDiagnosisId: null,
@@ -65,17 +99,7 @@ export const useDiagnosisStore = defineStore("diagnoses", {
   }),
   actions: {
     hydrate() {
-      const persisted = uni.getStorageSync(STORAGE_KEY) as
-        | PersistedDiagnosisState
-        | "";
-      if (!persisted) {
-        return;
-      }
-      this.activeDiagnosisId = persisted.activeDiagnosisId;
-      this.activeJobId = persisted.activeJobId;
-      this.recentDiagnosisId = persisted.recentDiagnosisId;
-      this.diagnosisIdsByJob = persisted.diagnosisIdsByJob ?? {};
-      this.pendingRequest = persisted.pendingRequest;
+      diagnosisResources.hydrate(this);
     },
     async create(
       assetId: string,
@@ -155,36 +179,13 @@ export const useDiagnosisStore = defineStore("diagnoses", {
       }
     },
     accept(diagnosis: Diagnosis) {
-      this.current = diagnosis;
-      this.activeDiagnosisId = diagnosis.id;
-      this.activeJobId = diagnosis.job_id;
-      this.diagnosisIdsByJob = {
-        [diagnosis.job_id]: diagnosis.id,
-        ...this.diagnosisIdsByJob,
-      };
-      const entries = Object.entries(this.diagnosisIdsByJob).slice(
-        0,
-        MAX_JOB_MAPPINGS,
-      );
-      this.diagnosisIdsByJob = Object.fromEntries(entries);
-      if (diagnosis.job_status === "COMPLETED") {
-        this.recentDiagnosisId = diagnosis.id;
-      }
-      useJobStore().track(diagnosis.job_id);
-      this.persist();
+      diagnosisResources.accept(this, diagnosis);
     },
     diagnosisIdForJob(jobId: string): string | null {
-      return this.diagnosisIdsByJob[jobId] ?? null;
+      return diagnosisResources.resourceIdForJob(this, jobId);
     },
     persist() {
-      const persisted: PersistedDiagnosisState = {
-        activeDiagnosisId: this.activeDiagnosisId,
-        activeJobId: this.activeJobId,
-        recentDiagnosisId: this.recentDiagnosisId,
-        diagnosisIdsByJob: this.diagnosisIdsByJob,
-        pendingRequest: this.pendingRequest,
-      };
-      uni.setStorageSync(STORAGE_KEY, persisted);
+      diagnosisResources.persist(this);
     },
   },
 });

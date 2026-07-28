@@ -12,10 +12,9 @@ import {
   type VoteChoice,
 } from "@/services/shares";
 import { useAuthStore } from "@/stores/auth";
-import { useJobStore } from "@/stores/jobs";
+import { createJobBackedResourceStore } from "@/stores/job-backed-resource";
 
 const STORAGE_KEY = "aiw:shares:v1";
-const MAX_JOB_MAPPINGS = 20;
 
 interface PendingShareRequest {
   optimizationId: string;
@@ -58,6 +57,41 @@ function safeErrorMessage(error: unknown): string {
   return "分享服务暂时不可用，请稍后重试。";
 }
 
+const shareResources = createJobBackedResourceStore<
+  ShareState,
+  Share,
+  PersistedShareState
+>({
+  storageKey: STORAGE_KEY,
+  resourceId: (share) => share.scene_code,
+  jobId: (share) => share.job_id,
+  isComplete: (share) => share.status === "ACTIVE",
+  restore: (state, persisted) => {
+    state.activeSceneCode = persisted.activeSceneCode;
+    state.activeJobId = persisted.activeJobId;
+    state.recentSceneCode = persisted.recentSceneCode;
+    state.sceneCodesByJob = persisted.sceneCodesByJob ?? {};
+    state.pendingRequest = persisted.pendingRequest ?? null;
+  },
+  serialize: (state) => ({
+    activeSceneCode: state.activeSceneCode,
+    activeJobId: state.activeJobId,
+    recentSceneCode: state.recentSceneCode,
+    sceneCodesByJob: state.sceneCodesByJob,
+    pendingRequest: state.pendingRequest,
+  }),
+  activeResourceId: (state, resourceId) => {
+    state.activeSceneCode = resourceId;
+  },
+  recentResourceId: (state, resourceId) => {
+    state.recentSceneCode = resourceId;
+  },
+  resourceIdsByJob: (state) => state.sceneCodesByJob,
+  updateResourceIdsByJob: (state, resourceIdsByJob) => {
+    state.sceneCodesByJob = resourceIdsByJob;
+  },
+});
+
 export const useShareStore = defineStore("shares", {
   state: (): ShareState => ({
     activeSceneCode: null,
@@ -74,17 +108,7 @@ export const useShareStore = defineStore("shares", {
   }),
   actions: {
     hydrate() {
-      const persisted = uni.getStorageSync(STORAGE_KEY) as
-        | PersistedShareState
-        | "";
-      if (!persisted) {
-        return;
-      }
-      this.activeSceneCode = persisted.activeSceneCode;
-      this.activeJobId = persisted.activeJobId;
-      this.recentSceneCode = persisted.recentSceneCode;
-      this.sceneCodesByJob = persisted.sceneCodesByJob ?? {};
-      this.pendingRequest = persisted.pendingRequest;
+      shareResources.hydrate(this);
     },
     async create(
       optimizationId: string,
@@ -238,36 +262,13 @@ export const useShareStore = defineStore("shares", {
       }
     },
     accept(share: Share) {
-      this.current = share;
-      this.activeSceneCode = share.scene_code;
-      this.activeJobId = share.job_id;
-      if (share.job_id) {
-        this.sceneCodesByJob = {
-          [share.job_id]: share.scene_code,
-          ...this.sceneCodesByJob,
-        };
-        this.sceneCodesByJob = Object.fromEntries(
-          Object.entries(this.sceneCodesByJob).slice(0, MAX_JOB_MAPPINGS),
-        );
-        useJobStore().track(share.job_id);
-      }
-      if (share.status === "ACTIVE") {
-        this.recentSceneCode = share.scene_code;
-      }
-      this.persist();
+      shareResources.accept(this, share);
     },
     sceneCodeForJob(jobId: string): string | null {
-      return this.sceneCodesByJob[jobId] ?? null;
+      return shareResources.resourceIdForJob(this, jobId);
     },
     persist() {
-      const persisted: PersistedShareState = {
-        activeSceneCode: this.activeSceneCode,
-        activeJobId: this.activeJobId,
-        recentSceneCode: this.recentSceneCode,
-        sceneCodesByJob: this.sceneCodesByJob,
-        pendingRequest: this.pendingRequest,
-      };
-      uni.setStorageSync(STORAGE_KEY, persisted);
+      shareResources.persist(this);
     },
   },
 });
