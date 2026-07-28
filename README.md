@@ -30,6 +30,7 @@ cp .env.example .env
 make install
 make infra-up
 make migrate
+make local-db-drill
 ```
 
 ## 开发

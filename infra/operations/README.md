@@ -35,6 +35,18 @@ The drill verifies checksum, empty target, single-transaction restore, migration
 
 Do not delete the isolated database until QA and the technical owner have reviewed the report. Delete it through the cloud console/change process, not from these scripts.
 
+For a local implementation check with Docker already running, use:
+
+```bash
+make local-db-drill
+```
+
+This command reads the Compose PostgreSQL source without changing it and restores into a separate
+`--rm` container backed by tmpfs. It exercises the same Python backup, checksum and restore
+verification code, writes its terminal output to `logs/`, and removes only the disposable container
+and temporary backup artifacts. Local evidence does not replace managed backup/PITR or Staging
+restore approval.
+
 ## AI model Canary and rollback
 
 The Staging workflow `AI Canary Staging` uses a deterministic hash of internal User ID to select a sticky 0/10/50/100% cohort. Candidate identifiers are non-secret ConfigMap values. Every newly created AI Job persists its resolved routes, timeout, cost ceiling, quality threshold, release track and optimization attempt limit.

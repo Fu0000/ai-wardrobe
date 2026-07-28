@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate staging-smoke
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill staging-smoke
 
 install: backend-install frontend-install
 
@@ -52,6 +52,9 @@ infra-down:
 
 migrate:
 	./scripts/infra.sh migrate
+
+local-db-drill:
+	./scripts/local-db-drill.sh
 
 staging-smoke:
 	STAGING_API_BASE_URL="$(STAGING_API_BASE_URL)" SMOKE_IMAGE="$(SMOKE_IMAGE)" ./scripts/staging-smoke.sh
