@@ -1,0 +1,60 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: staging-oncall-warning
+  group_by:
+    - alertname
+    - environment
+    - cluster
+    - service
+    - severity
+  group_wait: 1m
+  group_interval: 10m
+  repeat_interval: 4h
+  routes:
+    - receiver: staging-oncall-critical
+      matchers:
+        - environment="staging"
+        - severity="critical"
+      group_wait: 15s
+      group_interval: 5m
+      repeat_interval: 1h
+    - receiver: staging-oncall-warning
+      matchers:
+        - environment="staging"
+        - severity="warning"
+
+inhibit_rules:
+  - source_matchers:
+      - environment="staging"
+      - severity="critical"
+    target_matchers:
+      - environment="staging"
+      - severity="warning"
+    equal:
+      - alertname
+      - cluster
+      - service
+
+receivers:
+  - name: staging-oncall-critical
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/oncall-webhook-url
+        send_resolved: true
+        max_alerts: 20
+        http_config:
+          follow_redirects: false
+          enable_http2: true
+          tls_config:
+            insecure_skip_verify: false
+  - name: staging-oncall-warning
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/oncall-webhook-url
+        send_resolved: true
+        max_alerts: 20
+        http_config:
+          follow_redirects: false
+          enable_http2: true
+          tls_config:
+            insecure_skip_verify: false

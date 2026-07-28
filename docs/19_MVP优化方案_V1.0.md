@@ -236,12 +236,24 @@ Provider 调用前以配置错误失败，不允许只凭自动指标放量。
 PostgreSQL/Redis Exporter 与五条依赖规则覆盖可用性、连接使用率和 Redis 内存水位。
 `make local-alert-drill` 已验证三个 Scrape Target、规则健康、合成告警注入和解除，API
 Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
-`infra/operations/evidence/2026-07-28_local_alert_drill.md`。但 `alertmanager.yml`
-唯一 receiver 仍是 `local-ui-only`，尚无真实外发路由、环境标签和 On-call 响应记录。
+`infra/operations/evidence/2026-07-28_local_alert_drill.md`。本地 `alertmanager.yml`
+仍只使用 `local-ui-only`，不会误发外部通知。
 
-**剩余方案**：通过平台密钥管理配置真实通知路由；在 Staging 注入 critical/warning
-故障，验证环境/服务/定位入口、抑制与重复通知策略，并由指定 On-call 确认、解除和留存
-响应记录。不得把本地 Alertmanager API 注入等同于人员送达。
+Staging 外发合同已新增为 `alertmanager.staging.yml`：Webhook URL 只从 Secret 文件
+读取，Critical/Warning 分路由，按 environment/cluster/service/severity 分组，Critical
+抑制同故障 Warning，重复间隔分别为 1h/4h，并发送恢复通知。固定摘要 Alertmanager
+镜像在 CI 中同时执行配置语法与两类标签路由断言。
+
+`make staging-alert-drill` 提供 Start → 双人工 Ack → Finish/Abort 的两阶段演练：两个
+Severity 使用不同的一次性 Token，且 Token 只随通知发出，不写终端、State 或报告；
+Ack 必须来自 `oncall_*` 匿名轮值 ID，并满足默认 Critical 5 分钟、Warning 15 分钟
+SLA。Finish 复核在线配置的 Secret/抑制/重复/恢复合同，确认两个告警仍有效后解除并
+等待活动告警清零。State/报告目录要求私有权限，最终 `0600` 报告不含 Alertmanager
+地址、Bearer、Webhook 或 Ack Token。
+
+**剩余方案**：通过平台密钥管理部署真实 Webhook Secret 与该 Staging 配置，由指定
+On-call 实际接收并执行双 Ack，归档脱敏报告。不得把 Mock 或本地 Alertmanager API
+注入等同于人员送达。
 
 **验收**：`docs/16` 的 REL-005 转为 `PASS`。
 

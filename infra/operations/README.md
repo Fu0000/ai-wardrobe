@@ -75,6 +75,56 @@ This local drill deliberately does not claim notification delivery. Before Stagi
    the agreed window, acknowledge them, resolve them and retain the notification/response record.
 4. Confirm routing inhibition and repeat intervals prevent duplicate notification storms.
 
+The repository now provides `infra/observability/alertmanager.staging.yml`. It routes Staging
+critical and warning alerts separately, groups by environment/cluster/service/severity, inhibits a
+warning when the equivalent critical alert is active, uses one- and four-hour repeat intervals,
+and sends resolved notifications. The webhook URL is read only from
+`/etc/alertmanager/secrets/oncall-webhook-url`; mount that file from the platform secret manager and
+never render it into a ConfigMap, command, log or report. The Alertmanager API must remain private
+and sit behind bearer authentication.
+
+After the Staging config and webhook receiver are deployed, create an access-controlled `0700`
+evidence directory and start the two-phase human-delivery drill:
+
+```bash
+export STAGING_ALERTMANAGER_URL='https://alerts.staging.example.com'
+export STAGING_ALERT_RUNBOOK_URL='https://runbooks.example.com/ai-wardrobe/alerts'
+export AIW_STAGING_ALERTMANAGER_TOKEN='<private API bearer token>'
+make staging-alert-drill \
+  ALERT_DRILL_ARGS='start --state /secure/alert-drill/state.json'
+```
+
+The critical and warning notifications each contain a different one-time `ack_token`. The named
+On-call operator copies the token from the received notification into an environment variable and
+acknowledges it without placing it in command history:
+
+```bash
+export AIW_ALERT_DRILL_ACK_TOKEN='<token from the critical notification>'
+export AIW_ALERT_DRILL_RESPONDER_ID='oncall_primary'
+make staging-alert-drill \
+  ALERT_DRILL_ARGS='ack --severity critical --state /secure/alert-drill/state.json'
+
+export AIW_ALERT_DRILL_ACK_TOKEN='<token from the warning notification>'
+make staging-alert-drill \
+  ALERT_DRILL_ARGS='ack --severity warning --state /secure/alert-drill/state.json'
+unset AIW_ALERT_DRILL_ACK_TOKEN AIW_ALERT_DRILL_RESPONDER_ID
+```
+
+Finish only after both notifications were independently observed:
+
+```bash
+make staging-alert-drill \
+  ALERT_DRILL_ARGS='finish --state /secure/alert-drill/state.json --report /secure/alert-drill/report.json'
+unset STAGING_ALERTMANAGER_URL STAGING_ALERT_RUNBOOK_URL
+unset AIW_STAGING_ALERTMANAGER_TOKEN
+```
+
+The default acknowledgement SLAs are five minutes for critical and fifteen minutes for warning.
+The `0600` report records only the drill ID, approved receiver names, pseudonymous responder ID,
+acknowledgement durations and resolution checks. It never records the Alertmanager origin, bearer
+token, webhook URL or acknowledgement token. If the drill cannot be completed, run
+`ALERT_DRILL_ARGS='abort --state ...'` to resolve both synthetic alerts and remove transient state.
+
 `REL-005` and `OBS-02` remain incomplete until that Staging delivery evidence exists.
 
 ## Staging security and signed URL audit

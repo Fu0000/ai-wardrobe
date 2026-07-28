@@ -493,6 +493,10 @@ API 创建业务记录与 OutboxEvent
 - W5 Growth 待验收：真实 COS 分享卡片、微信好友分享和打开、分享可见 P90、投票并发、低端安卓真机，以及归因漏斗查询。
 - W6 Privacy/Hardening 代码证据：账号与单图异步 DeletionJob、原图到诊断/优化/分享派生图的闭包清理、COS/DB 两阶段重试、删除竞态稳定检查、账号删除后的本地已保存照片和业务状态清理、依赖感知 Readiness、1 MiB JSON Body Limit、CORS 与安全响应头。
 - W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product/依赖 Readiness 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager、PostgreSQL/Redis Exporter 和 14 条告警规则；本地演练已验证五条依赖规则、三个 Scrape Target、合成告警注入与解除，真实 On-call 外发仍待 Staging 验收。
+- W6 告警送达代码证据：Staging Alertmanager 从 Secret 文件读取 Webhook，按环境和
+  Severity 路由并配置抑制、重复与恢复通知；两阶段演练使用仅随通知发送的一次性 Token
+  绑定 Critical/Warning 人工 Ack，在 SLA 内双确认后才生成脱敏 `0600` 报告。真实
+  Webhook Secret、人员送达和响应记录仍待 Staging 验收。
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
 - W6 环境隔离证据：Staging 清单显式标记 `AIW_ENVIRONMENT=staging`，日志、Trace、
   指标与产品事件不会混入 Production 口径；Staging 与 Production 共同执行非本地

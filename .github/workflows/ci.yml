@@ -80,6 +80,32 @@ jobs:
           uv run alembic check
       - name: Tests
         run: uv run pytest
+      - name: Validate Alertmanager routing contracts
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run --rm \
+            --entrypoint /bin/amtool \
+            --volume "${GITHUB_WORKSPACE}/infra/observability:/config:ro" \
+            prom/alertmanager@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286 \
+            check-config \
+            /config/alertmanager.yml \
+            /config/alertmanager.staging.yml
+          for severity in critical warning; do
+            receiver="$(
+              docker run --rm \
+                --entrypoint /bin/amtool \
+                --volume "${GITHUB_WORKSPACE}/infra/observability:/config:ro" \
+                prom/alertmanager@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286 \
+                config routes test \
+                --config.file=/config/alertmanager.staging.yml \
+                environment=staging \
+                "severity=${severity}" \
+                alertname=AIWardrobeDeliveryDrill \
+                cluster=ai-wardrobe-staging \
+                service=ai-wardrobe
+            )"
+            test "$receiver" = "staging-oncall-${severity}"
+          done
       - name: PostgreSQL and Redis integration tests
         env:
           AIW_RUN_INTEGRATION_TESTS: "1"
@@ -122,4 +148,5 @@ jobs:
           bash -n scripts/performance/local-api-baseline.sh
           bash -n scripts/performance/staging-ai-capacity.sh
           bash -n scripts/performance/staging-queue-recovery.sh
+          bash -n scripts/ops/staging-alert-delivery-drill.sh
           bash -n scripts/security/staging-security-audit.sh

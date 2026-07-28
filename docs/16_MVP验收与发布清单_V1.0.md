@@ -162,6 +162,20 @@ make staging-ai-capacity
 数据集和未就绪副本。每级报告须满足 Diagnosis 成功率 ≥95%、关联头 100%、
 HTTP 失败率 <2%、P90 <20 秒、P95 <30 秒，且不得记录任何身份或资产数据。
 
+Staging 告警送达使用两阶段人工确认入口。Webhook 与 Alertmanager Bearer 只允许从
+Secret/环境变量注入；Critical/Warning 通知中的一次性 Ack Token 不得进入命令参数、
+日志或报告。完整部署和操作要求见 `infra/operations/README.md`：
+
+```bash
+make staging-alert-drill ALERT_DRILL_ARGS='start --state /secure/alert-drill/state.json'
+# On-call 分别从两条通知取得 Token 后执行 ack
+make staging-alert-drill \
+  ALERT_DRILL_ARGS='finish --state /secure/alert-drill/state.json --report /secure/alert-drill/report.json'
+```
+
+只有最终 `0600` 报告为 `PASSED` 且能关联真实通知/轮值记录时，REL-005 才能通过；
+Mock、本地注入或仅验证配置不得替代人员送达证据。
+
 ## 六、发布 Gate
 
 | Gate | `GO` 标准 | 当前状态（2026-07-28） |
@@ -172,7 +186,7 @@ HTTP 失败率 <2%、P90 <20 秒、P95 <30 秒，且不得记录任何身份或�
 | Security/Privacy | 双账号隔离、私有 URL、删除闭包和日志脱敏通过 | BLOCKED：42 个实库用例已覆盖 API 双账号隔离、关联污染和删除闭包；真实 COS Signed URL 过期/权限、对象删除与授权 Prompt Injection Eval 未验收 |
 | AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：Bundle/Runner 已在 Provider 调用前强制样本分布、授权/私有引用，以及全 Validation 双人盲评、版本绑定、分歧仲裁和人工标签一致性；仍缺真实授权数据、评审记录、基线与真实 Provider 证据 |
 | Staging E2E | 微信登录、COS、全部 Worker、分享投票和冒烟通过 | BLOCKED：缺 Staging 与凭据 |
-| Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复演练通过；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
+| Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复通过，Staging 告警 Secret 路由和双 Ack 演练入口已失败关闭；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
 | Performance | 核心容量、P95、队列积压和低端安卓达标 | IN_PROGRESS：本地 5→20 req/s API 基线为 100% 成功、0% HTTP 失败、P95 14.99 ms；Staging AI/COS、队列恢复、资源水位与低端安卓未验收 |
 | Operations | Dashboard、On-call、Runbook、反馈入口和状态沟通就位 | NOT_RUN |
 | Defects | Blocker=0、Critical=0；Major 均有 Owner 和截止日 | PENDING |
