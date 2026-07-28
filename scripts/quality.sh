@@ -16,6 +16,7 @@ run_tests() {
 run_lint() {
   aiw_require_command uv
   aiw_require_command pnpm
+  "${AIW_SCRIPT_DIR}/check-structure.sh"
   cd "${AIW_REPO_ROOT}/backend"
   uv run ruff check .
   uv run ruff format --check .
@@ -67,6 +68,9 @@ case "${1:-}" in
   typecheck)
     aiw_run_logged "quality-typecheck" run_typecheck
     ;;
+  structure)
+    aiw_run_logged "quality-structure" "${AIW_SCRIPT_DIR}/check-structure.sh"
+    ;;
   security-audit)
     aiw_run_logged "quality-security-audit" run_security_audit
     ;;
@@ -74,6 +78,6 @@ case "${1:-}" in
     aiw_run_logged "quality-build" run_build
     ;;
   *)
-    aiw_fail "用法: scripts/quality.sh {test|lint|typecheck|security-audit|build}"
+    aiw_fail "用法: scripts/quality.sh {test|lint|typecheck|structure|security-audit|build}"
     ;;
 esac

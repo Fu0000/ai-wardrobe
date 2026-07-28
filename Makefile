@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck security-audit build infra-up infra-observability-up infra-down migrate staging-smoke
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check security-audit build infra-up infra-observability-up infra-down migrate staging-smoke
 
 install: backend-install frontend-install
 
@@ -28,6 +28,9 @@ lint:
 
 typecheck:
 	./scripts/quality.sh typecheck
+
+structure-check:
+	./scripts/quality.sh structure
 
 security-audit:
 	./scripts/quality.sh security-audit

@@ -86,6 +86,7 @@ unset AIW_SMOKE_ACCESS_TOKEN
 ```bash
 make lint
 make typecheck
+make structure-check
 make test
 make security-audit
 make build
@@ -94,6 +95,10 @@ make build
 Makefile 只负责提供稳定命令名，实际执行统一进入 `scripts/*.sh`。命令输出会同时显示在
 终端并写入 `logs/<任务>-<时间>-<进程>.log`；可通过 `AIW_LOG_DIR` 为 CI 或临时环境
 指定其他日志目录。
+
+`make structure-check` 保证运行时代码、测试、脚本、基础设施与 Eval 的每个目录不超过
+8 个直接文件。按编号维护的 `docs/` 和 Alembic 线性迁移目录属于有序注册表，不参与
+该限制。
 
 供应链扫描对未批准的 High/Critical 漏洞失败；临时例外必须登记在
 `docs/18_供应链安全例外登记_V1.0.md`，包含影响边界、补偿控制、Owner
