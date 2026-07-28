@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
-import { nextJobPollDelay } from "@/lib/job-progress";
+import { useJobPolling } from "@/composables/useJobPolling";
 import { useDeletionStore } from "@/stores/deletion";
 
 const deletionStore = useDeletionStore();
@@ -15,9 +14,6 @@ const {
   refreshing,
   submitting,
 } = storeToRefs(deletionStore);
-let polling = false;
-let pollAttempt = 0;
-let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
 const completed = computed(
   () => current.value?.status === "COMPLETED" || inferredCompleted.value,
@@ -38,44 +34,24 @@ const progress = computed(() => {
   return 16;
 });
 
-const stopPolling = () => {
-  polling = false;
-  if (pollTimer) {
-    globalThis.clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-};
-
-const scheduleRefresh = () => {
-  if (!polling || !active.value) {
-    return;
-  }
-  pollTimer = globalThis.setTimeout(() => {
-    pollAttempt += 1;
-    void refresh();
-  }, nextJobPollDelay(pollAttempt));
-};
-
-const refresh = async () => {
-  if (!polling || !active.value) {
-    return;
-  }
-  const result = await deletionStore.refresh();
-  if (!polling || completed.value || result?.status === "FAILED_FINAL") {
-    stopPolling();
-    return;
-  }
-  scheduleRefresh();
-};
+const poller = useJobPolling({
+  canStart: () => active.value,
+  poll: () => deletionStore.refresh(),
+  evaluate: (result) => ({
+    continuePolling:
+      active.value &&
+      !completed.value &&
+      result?.status !== "FAILED_FINAL",
+    progressKey: completed.value ? "COMPLETED" : result?.status,
+  }),
+});
 
 const submitDeletion = async (forceNew = false) => {
   const result = await deletionStore.request(forceNew);
   if (!result) {
     return;
   }
-  polling = true;
-  pollAttempt = 0;
-  await refresh();
+  poller.start();
 };
 
 const confirmDeletion = () => {
@@ -108,15 +84,6 @@ const startFresh = () => {
   uni.reLaunch({ url: "/pages/index/index" });
 };
 
-onShow(() => {
-  if (active.value) {
-    polling = true;
-    pollAttempt = 0;
-    void refresh();
-  }
-});
-onHide(stopPolling);
-onUnload(stopPolling);
 </script>
 
 <template>
@@ -191,7 +158,7 @@ onUnload(stopPolling);
         v-else
         class="refresh-action"
         :disabled="refreshing"
-        @click="refresh"
+        @click="poller.refreshNow"
       >
         {{ refreshing ? "正在刷新" : "刷新状态" }}
       </button>

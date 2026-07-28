@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
 import { storeToRefs } from "pinia";
 
-import { nextJobPollDelay, presentJobStage } from "@/lib/job-progress";
+import { useJobPolling } from "@/composables/useJobPolling";
+import { presentJobStage } from "@/lib/job-progress";
 import { type Job } from "@/services/jobs";
 import { useDiagnosisStore } from "@/stores/diagnoses";
 import { useJobStore } from "@/stores/jobs";
@@ -14,9 +14,6 @@ const diagnoses = useDiagnosisStore();
 const optimizations = useOptimizationStore();
 const shares = useShareStore();
 const { orderedJobs, refreshing } = storeToRefs(jobs);
-let refreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let pollAttempt = 0;
-let polling = false;
 
 const taskTypeLabel = (taskType: Job["task_type"]): string => {
   const labels: Record<Job["task_type"], string> = {
@@ -28,38 +25,19 @@ const taskTypeLabel = (taskType: Job["task_type"]): string => {
   return labels[taskType];
 };
 
-const scheduleRefresh = () => {
-  if (!polling || !jobs.hasPendingJobs) {
-    return;
-  }
-  const delay = nextJobPollDelay(pollAttempt);
-  pollAttempt += 1;
-  refreshTimer = globalThis.setTimeout(() => {
-    void refresh();
-  }, delay);
-};
-
-const refresh = async () => {
-  await jobs.refresh();
-  scheduleRefresh();
-};
-
-const startPolling = () => {
-  polling = true;
-  pollAttempt = 0;
-  if (refreshTimer) {
-    globalThis.clearTimeout(refreshTimer);
-  }
-  void refresh();
-};
-
-const stopPolling = () => {
-  polling = false;
-  if (refreshTimer) {
-    globalThis.clearTimeout(refreshTimer);
-    refreshTimer = null;
-  }
-};
+useJobPolling({
+  canStart: () => jobs.trackedJobIds.length > 0,
+  poll: async () => {
+    await jobs.refresh();
+    return jobs.orderedJobs
+      .map((job) => `${job.id}:${job.status}`)
+      .join("|");
+  },
+  evaluate: (progressKey) => ({
+    continuePolling: jobs.hasPendingJobs,
+    progressKey,
+  }),
+});
 
 const openJob = (job: Job) => {
   if (job.task_type === "STYLE_DIAGNOSIS") {
@@ -105,9 +83,6 @@ const openJob = (job: Job) => {
   uni.showToast({ title: "任务详情正在接入", icon: "none" });
 };
 
-onShow(startPolling);
-onHide(stopPolling);
-onUnload(stopPolling);
 </script>
 
 <template>

@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
-import {
-  nextJobPollDelay,
-  presentJobStage,
-  type JobStage,
-} from "@/lib/job-progress";
+import { useJobPolling } from "@/composables/useJobPolling";
+import { presentJobStage } from "@/lib/job-progress";
 import { useAssetStore } from "@/stores/assets";
 import { useDiagnosisStore } from "@/stores/diagnoses";
 
@@ -15,10 +12,6 @@ const diagnoses = useDiagnosisStore();
 const assets = useAssetStore();
 const { current, errorMessage, refreshing, submitting } = storeToRefs(diagnoses);
 let diagnosisId: string | null = null;
-let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let polling = false;
-let pollAttempt = 0;
-let lastStatus: JobStage | null = null;
 
 const presentation = computed(() =>
   current.value
@@ -30,19 +23,10 @@ const isFinalFailure = computed(() =>
   ["FAILED_FINAL", "CANCELLED"].includes(current.value?.job_status ?? ""),
 );
 
-const stopPolling = () => {
-  polling = false;
-  if (pollTimer) {
-    globalThis.clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-};
-
 const openResult = () => {
   if (!current.value) {
     return;
   }
-  stopPolling();
   uni.redirectTo({ url: `/pages/diagnosis/result?id=${current.value.id}` });
 };
 
@@ -54,45 +38,28 @@ const openHome = () => {
   uni.reLaunch({ url: "/pages/index/index" });
 };
 
-const scheduleRefresh = () => {
-  if (!polling) {
-    return;
-  }
-  const delay = nextJobPollDelay(pollAttempt);
-  pollAttempt += 1;
-  pollTimer = globalThis.setTimeout(() => {
-    void refresh();
-  }, delay);
-};
-
-const refresh = async () => {
-  if (!diagnosisId || !polling) {
-    return;
-  }
-  const diagnosis = await diagnoses.refresh(diagnosisId);
-  if (!polling) {
-    return;
-  }
-  if (!diagnosis) {
-    scheduleRefresh();
-    return;
-  }
-  if (diagnosis.job_status !== lastStatus) {
-    lastStatus = diagnosis.job_status;
-    pollAttempt = 0;
-  }
-  if (diagnosis.job_status === "COMPLETED") {
-    openResult();
-    return;
-  }
-  if (
-    ["FAILED_FINAL", "TIMED_OUT", "CANCELLED"].includes(diagnosis.job_status)
-  ) {
-    stopPolling();
-    return;
-  }
-  scheduleRefresh();
-};
+const poller = useJobPolling({
+  canStart: () => Boolean(diagnosisId),
+  poll: () => diagnoses.refresh(diagnosisId ?? undefined),
+  evaluate: (diagnosis) => {
+    if (!diagnosis) {
+      return { continuePolling: true };
+    }
+    if (diagnosis.job_status === "COMPLETED") {
+      openResult();
+      return {
+        continuePolling: false,
+        progressKey: diagnosis.job_status,
+      };
+    }
+    return {
+      continuePolling: !["FAILED_FINAL", "TIMED_OUT", "CANCELLED"].includes(
+        diagnosis.job_status,
+      ),
+      progressKey: diagnosis.job_status,
+    };
+  },
+});
 
 const retry = async () => {
   if (!current.value || !assets.assetId) {
@@ -107,10 +74,7 @@ const retry = async () => {
       true,
     );
     diagnosisId = diagnosis.id;
-    lastStatus = diagnosis.job_status;
-    pollAttempt = 0;
-    polling = true;
-    await refresh();
+    poller.start();
   } catch {
     // The store preserves a safe, user-facing error and the idempotency key.
   }
@@ -121,14 +85,6 @@ onLoad((query) => {
     (typeof query?.id === "string" ? query.id : null) ??
     diagnoses.activeDiagnosisId;
 });
-
-onShow(() => {
-  polling = true;
-  pollAttempt = 0;
-  void refresh();
-});
-onHide(stopPolling);
-onUnload(stopPolling);
 </script>
 
 <template>
@@ -204,7 +160,7 @@ onUnload(stopPolling);
       <button
         v-if="errorMessage && !refreshing && !isFinalFailure"
         class="text-action"
-        @click="refresh"
+        @click="poller.refreshNow"
       >
         立即刷新
       </button>

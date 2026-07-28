@@ -1,23 +1,16 @@
 <script setup lang="ts">
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 
-import {
-  nextJobPollDelay,
-  presentOptimizationStage,
-  type JobStage,
-} from "@/lib/job-progress";
+import { useJobPolling } from "@/composables/useJobPolling";
+import { presentOptimizationStage } from "@/lib/job-progress";
 import { useOptimizationStore } from "@/stores/optimizations";
 
 const optimizations = useOptimizationStore();
 const { current, errorMessage, refreshing, submitting } =
   storeToRefs(optimizations);
 let optimizationId: string | null = null;
-let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let polling = false;
-let pollAttempt = 0;
-let lastStatus: JobStage | null = null;
 
 const presentation = computed(() =>
   current.value
@@ -28,19 +21,10 @@ const isFinalFailure = computed(() =>
   ["FAILED_FINAL", "CANCELLED"].includes(current.value?.job_status ?? ""),
 );
 
-const stopPolling = () => {
-  polling = false;
-  if (pollTimer) {
-    globalThis.clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-};
-
 const openResult = () => {
   if (!current.value) {
     return;
   }
-  stopPolling();
   uni.redirectTo({ url: `/pages/optimization/result?id=${current.value.id}` });
 };
 
@@ -48,46 +32,28 @@ const openTasks = () => {
   uni.navigateTo({ url: "/pages/tasks/index" });
 };
 
-const scheduleRefresh = () => {
-  if (!polling) {
-    return;
-  }
-  pollTimer = globalThis.setTimeout(() => {
-    pollAttempt += 1;
-    void refresh();
-  }, nextJobPollDelay(pollAttempt));
-};
-
-const refresh = async () => {
-  if (!optimizationId || !polling) {
-    return;
-  }
-  const optimization = await optimizations.refresh(optimizationId);
-  if (!polling) {
-    return;
-  }
-  if (!optimization) {
-    scheduleRefresh();
-    return;
-  }
-  if (optimization.job_status !== lastStatus) {
-    lastStatus = optimization.job_status;
-    pollAttempt = 0;
-  }
-  if (optimization.job_status === "COMPLETED") {
-    openResult();
-    return;
-  }
-  if (
-    ["FAILED_FINAL", "TIMED_OUT", "CANCELLED"].includes(
-      optimization.job_status,
-    )
-  ) {
-    stopPolling();
-    return;
-  }
-  scheduleRefresh();
-};
+const poller = useJobPolling({
+  canStart: () => Boolean(optimizationId),
+  poll: () => optimizations.refresh(optimizationId ?? undefined),
+  evaluate: (optimization) => {
+    if (!optimization) {
+      return { continuePolling: true };
+    }
+    if (optimization.job_status === "COMPLETED") {
+      openResult();
+      return {
+        continuePolling: false,
+        progressKey: optimization.job_status,
+      };
+    }
+    return {
+      continuePolling: !["FAILED_FINAL", "TIMED_OUT", "CANCELLED"].includes(
+        optimization.job_status,
+      ),
+      progressKey: optimization.job_status,
+    };
+  },
+});
 
 const retry = async () => {
   if (!current.value) {
@@ -99,10 +65,7 @@ const retry = async () => {
       true,
     );
     optimizationId = optimization.id;
-    polling = true;
-    pollAttempt = 0;
-    lastStatus = optimization.job_status;
-    await refresh();
+    poller.start();
   } catch {
     // Safe error copy and the idempotency key are retained by the store.
   }
@@ -113,13 +76,6 @@ onLoad((query) => {
     (typeof query?.id === "string" ? query.id : null) ??
     optimizations.activeOptimizationId;
 });
-onShow(() => {
-  polling = true;
-  pollAttempt = 0;
-  void refresh();
-});
-onHide(stopPolling);
-onUnload(stopPolling);
 </script>
 
 <template>
@@ -179,7 +135,7 @@ onUnload(stopPolling);
       <button
         v-if="errorMessage && !refreshing && !isFinalFailure"
         class="text-action"
-        @click="refresh"
+        @click="poller.refreshNow"
       >
         立即刷新
       </button>

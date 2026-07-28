@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import {
-  onHide,
   onLoad,
   onShareAppMessage,
   onShareTimeline,
-  onShow,
-  onUnload,
 } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
-import { nextJobPollDelay } from "@/lib/job-progress";
+import { useJobPolling } from "@/composables/useJobPolling";
 import {
   shareLandingPath,
   shareLandingQuery,
@@ -24,9 +21,6 @@ const { current, errorMessage, refreshing, submitting } = storeToRefs(shares);
 const displayScore = ref(false);
 let optimizationId: string | null = null;
 let sceneCode: string | null = null;
-let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let pollAttempt = 0;
-let polling = false;
 
 const share = computed(() =>
   current.value?.scene_code === sceneCode ? current.value : null,
@@ -40,38 +34,17 @@ const isFailed = computed(
     share.value?.job_status === "FAILED_FINAL",
 );
 
-const stopPolling = () => {
-  polling = false;
-  if (pollTimer) {
-    globalThis.clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-};
-
-const scheduleRefresh = () => {
-  if (!polling || !sceneCode) {
-    return;
-  }
-  pollTimer = globalThis.setTimeout(() => {
-    pollAttempt += 1;
-    void refresh();
-  }, nextJobPollDelay(pollAttempt));
-};
-
-const refresh = async () => {
-  if (!sceneCode || !polling) {
-    return;
-  }
-  const result = await shares.refresh(sceneCode);
-  if (!polling) {
-    return;
-  }
-  if (result?.status === "ACTIVE" || result?.status === "FAILED") {
-    stopPolling();
-    return;
-  }
-  scheduleRefresh();
-};
+const poller = useJobPolling({
+  canStart: () => Boolean(sceneCode),
+  poll: () => shares.refresh(sceneCode ?? undefined),
+  evaluate: (result) => ({
+    continuePolling:
+      result?.status !== "ACTIVE" && result?.status !== "FAILED",
+    progressKey: result
+      ? `${result.status}:${result.job_status ?? "NO_JOB"}`
+      : undefined,
+  }),
+});
 
 const create = async (forceNew = false) => {
   if (!optimizationId) {
@@ -85,13 +58,11 @@ const create = async (forceNew = false) => {
       forceNew,
     );
     sceneCode = result.scene_code;
-    polling = true;
-    pollAttempt = 0;
     if (result.status === "ACTIVE") {
-      stopPolling();
+      poller.stop();
       return;
     }
-    await refresh();
+    poller.start();
   } catch {
     // The store retains safe copy and the idempotency key for weak-network retry.
   }
@@ -103,7 +74,7 @@ const updateDisplayScore = (event: unknown) => {
 };
 
 const cancel = () => {
-  stopPolling();
+  poller.stop();
   uni.navigateBack();
 };
 
@@ -148,16 +119,6 @@ onLoad((query) => {
     (typeof query?.scene === "string" ? query.scene : null) ??
     shares.activeSceneCode;
 });
-onShow(() => {
-  if (!sceneCode) {
-    return;
-  }
-  polling = true;
-  pollAttempt = 0;
-  void refresh();
-});
-onHide(stopPolling);
-onUnload(stopPolling);
 </script>
 
 <template>
