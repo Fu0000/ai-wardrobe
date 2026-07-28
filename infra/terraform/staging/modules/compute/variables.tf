@@ -44,6 +44,11 @@ variable "primary_availability_zone" {
   type        = string
 }
 
+variable "standby_availability_zone" {
+  description = "公网 CLB 灾备可用区。"
+  type        = string
+}
+
 variable "cluster_version" {
   description = "精确 TKE Kubernetes 版本。"
   type        = string
@@ -76,6 +81,11 @@ variable "ssh_key_ids" {
 
 variable "nat_eip_bandwidth_mbps" {
   description = "共享 NAT EIP 出站带宽。"
+  type        = number
+}
+
+variable "edge_clb_bandwidth_mbps" {
+  description = "公网 CLB 出站带宽。"
   type        = number
 }
 

@@ -277,6 +277,17 @@ variable "nat_eip_bandwidth_mbps" {
   }
 }
 
+variable "edge_clb_bandwidth_mbps" {
+  description = "Staging 公网 CLB 的最大出站带宽，单位 Mbps。"
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = contains([5, 10, 20, 50, 100], var.edge_clb_bandwidth_mbps)
+    error_message = "edge_clb_bandwidth_mbps 必须是 5、10、20、50 或 100 Mbps。"
+  }
+}
+
 variable "extra_tags" {
   description = "附加非敏感资源标签。"
   type        = map(string)

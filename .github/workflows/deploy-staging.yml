@@ -69,7 +69,9 @@ jobs:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
         run: |
           test -n "$KUBECONFIG_B64"
-          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          printf '%s' "$KUBECONFIG_B64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/kubeconfig"
           chmod 600 "$RUNNER_TEMP/kubeconfig"
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
@@ -78,6 +80,10 @@ jobs:
           GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           TRUSTED_PROXY_CIDRS_JSON: ${{ vars.STAGING_TRUSTED_PROXY_CIDRS_JSON }}
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
+          STAGING_TLS_CERT_ID: ${{ vars.STAGING_TLS_CERT_ID }}
+          STAGING_EDGE_CLB_ID: ${{ vars.STAGING_EDGE_CLB_ID }}
         run: |
           kubectl apply -f infra/k8s/base/namespace.yaml
           kubectl apply -f infra/k8s/base/configmap.yaml
@@ -91,6 +97,10 @@ jobs:
           test -n "$GHCR_PULL_USERNAME"
           test -n "$GHCR_PULL_TOKEN"
           test -n "$TRUSTED_PROXY_CIDRS_JSON"
+          test -n "$STAGING_API_BASE_URL"
+          test -n "$STAGING_API_HOST"
+          test -n "$STAGING_TLS_CERT_ID"
+          test -n "$STAGING_EDGE_CLB_ID"
           python - <<'PY'
           import ipaddress
           import json
@@ -138,11 +148,36 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy immutable image
+      - name: Render and deploy immutable Staging manifests
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
+          STAGING_TLS_CERT_ID: ${{ vars.STAGING_TLS_CERT_ID }}
+          STAGING_EDGE_CLB_ID: ${{ vars.STAGING_EDGE_CLB_ID }}
         run: |
-          kubectl kustomize infra/k8s/base \
-            | sed "s|AIW_IMAGE_PLACEHOLDER|${IMAGE}|g" \
-            | kubectl apply -f -
+          controller_version="$(
+            kubectl -n kube-system get configmap tke-ingress-controller-config \
+              --output=jsonpath='{.data.VERSION}'
+          )"
+          test -n "$controller_version"
+          install -d -m 700 "$RUNNER_TEMP/aiw-staging-manifests"
+          kubectl kustomize infra/k8s/staging \
+            > "$RUNNER_TEMP/aiw-staging-manifests/template.yaml"
+          chmod 600 "$RUNNER_TEMP/aiw-staging-manifests/template.yaml"
+          python backend/scripts/deployment/staging_manifests.py \
+            --input "$RUNNER_TEMP/aiw-staging-manifests/template.yaml" \
+            --output "$RUNNER_TEMP/aiw-staging-manifests/rendered.yaml" \
+            --image "$IMAGE" \
+            --api-host "$STAGING_API_HOST" \
+            --api-base-url "$STAGING_API_BASE_URL" \
+            --tls-certificate-id "$STAGING_TLS_CERT_ID" \
+            --edge-clb-id "$STAGING_EDGE_CLB_ID" \
+            --ingress-controller-version "$controller_version"
+          kubectl apply \
+            --dry-run=server \
+            -f "$RUNNER_TEMP/aiw-staging-manifests/rendered.yaml"
+          kubectl apply \
+            -f "$RUNNER_TEMP/aiw-staging-manifests/rendered.yaml"
 
       - name: Wait for safe rollout
         run: |
@@ -158,11 +193,60 @@ jobs:
               --timeout=10m
           done
 
-      - name: Readiness smoke test
+      - name: Verify fixed CLB and public DNS binding
+        env:
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
+          STAGING_EDGE_CLB_ID: ${{ vars.STAGING_EDGE_CLB_ID }}
+        run: |
+          ingress_address=""
+          observed_clb_id=""
+          for _ in $(seq 1 60); do
+            ingress_address="$(
+              kubectl -n ai-wardrobe get ingress ai-wardrobe-api \
+                --output=jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}'
+            )"
+            observed_clb_id="$(
+              kubectl -n ai-wardrobe get ingress ai-wardrobe-api \
+                --output=jsonpath='{.metadata.annotations.kubernetes\.io/ingress\.qcloud-loadbalance-id}'
+            )"
+            if [ -n "$ingress_address" ] && [ -n "$observed_clb_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+          test "$observed_clb_id" = "$STAGING_EDGE_CLB_ID"
+          test -n "$ingress_address"
+          python - "$STAGING_API_HOST" "$ingress_address" <<'PY'
+          import ipaddress
+          import socket
+          import sys
+
+          host, ingress_address = sys.argv[1:]
+          host_addresses = {
+              result[4][0]
+              for result in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+          }
+          try:
+              expected_addresses = {str(ipaddress.ip_address(ingress_address))}
+          except ValueError:
+              expected_addresses = {
+                  result[4][0]
+                  for result in socket.getaddrinfo(
+                      ingress_address,
+                      443,
+                      type=socket.SOCK_STREAM,
+                  )
+              }
+          if host_addresses.isdisjoint(expected_addresses):
+              raise SystemExit("Staging API DNS does not resolve to the Ingress CLB")
+          PY
+
+      - name: HTTPS and redirect smoke test
         env:
           STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_API_HOST: ${{ vars.STAGING_API_HOST }}
         run: |
-          test -n "$STAGING_API_BASE_URL"
+          headers="$RUNNER_TEMP/aiw-staging-manifests/headers.txt"
           curl \
             --fail \
             --silent \
@@ -170,8 +254,29 @@ jobs:
             --retry 5 \
             --retry-all-errors \
             --retry-delay 3 \
+            --proto '=https' \
+            --tlsv1.2 \
+            --dump-header "$headers" \
             "${STAGING_API_BASE_URL%/}/health/ready"
+          grep -qi '^strict-transport-security:' "$headers"
+          read -r redirect_code redirect_url < <(
+            curl \
+              --silent \
+              --show-error \
+              --max-time 15 \
+              --output /dev/null \
+              --write-out '%{http_code} %{redirect_url}\n' \
+              "http://${STAGING_API_HOST}/health/ready"
+          )
+          test "$redirect_code" = "307"
+          test "$redirect_url" = "${STAGING_API_BASE_URL%/}/health/ready"
 
-      - name: Remove cluster credential
+      - name: Remove deployment credentials and rendered manifests
         if: ${{ always() }}
-        run: rm -f "$RUNNER_TEMP/kubeconfig"
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/kubeconfig" \
+            "$RUNNER_TEMP/aiw-staging-manifests/template.yaml" \
+            "$RUNNER_TEMP/aiw-staging-manifests/rendered.yaml" \
+            "$RUNNER_TEMP/aiw-staging-manifests/headers.txt"
+          rmdir "$RUNNER_TEMP/aiw-staging-manifests" 2>/dev/null || true

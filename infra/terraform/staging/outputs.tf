@@ -74,6 +74,16 @@ output "tke_private_kubeconfig" {
   sensitive   = true
 }
 
+output "edge_clb_id" {
+  description = "Staging qcloud Ingress 必须复用的固定公网 CLB ID。"
+  value       = module.compute.edge_clb_id
+}
+
+output "edge_clb_vips" {
+  description = "Staging API DNS A 记录必须指向的 CLB VIP。"
+  value       = module.compute.edge_clb_vips
+}
+
 output "compute_contract" {
   description = "不含凭据的 TKE、NAT 与 CLS 安全合同。"
   value       = module.compute.contract

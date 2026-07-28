@@ -557,8 +557,11 @@ API 创建业务记录与 OutboxEvent
   合同校验；TKE 使用私网控制面、跨区 2～4 节点、无节点公网 IP、标准 NAT 出站、
   删除保护和保留 15 天的 KMS 加密 CLS Audit/Event。受保护的手动工作流仅允许从
   `develop` 执行真实只读 Plan、分离 Provider/State 凭据且不会上传敏感 Plan；部署与
-  AI Canary 已拒绝公网 Runner，限定 VPC 内临时 Runner。真实 Plan/Apply、临时 Runner、
-  公网 HTTPS 入口、云上连通性和成本复核仍待账号、域名、证书与审批。
+  AI Canary 已拒绝公网 Runner，限定 VPC 内临时 Runner；Terraform 固定创建跨区、
+  删除保护的公网 CLB 与 80/443 安全组，Kubernetes Staging Overlay 复用该 CLB，通过
+  既有证书 ID 建立 HTTPS 和 307 重定向，发布前校验 Controller 版本、服务端 Dry-run、
+  CLB/DNS 绑定、证书信任、HSTS 与健康探针。真实 Plan/Apply、临时 Runner、DNS/证书
+  绑定、云上连通性和成本复核仍待账号、域名、证书与审批。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
   含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
   过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。

@@ -68,6 +68,7 @@ module "compute" {
   app_subnet_cidrs          = [local.app_subnet_cidr, local.app_standby_subnet_cidr]
   app_security_group_id     = tencentcloud_security_group.app.id
   primary_availability_zone = var.availability_zone
+  standby_availability_zone = var.standby_availability_zone
   cluster_version           = var.tke_cluster_version
   cluster_cidr              = var.tke_cluster_cidr
   service_cidr              = var.tke_service_cidr
@@ -75,6 +76,7 @@ module "compute" {
   backup_instance_types     = var.tke_backup_instance_types
   ssh_key_ids               = var.tke_ssh_key_ids
   nat_eip_bandwidth_mbps    = var.nat_eip_bandwidth_mbps
+  edge_clb_bandwidth_mbps   = var.edge_clb_bandwidth_mbps
   tags                      = local.common_tags
 
   depends_on = [terraform_data.guardrails]

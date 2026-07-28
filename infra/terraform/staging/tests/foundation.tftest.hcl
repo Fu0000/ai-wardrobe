@@ -177,7 +177,14 @@ run "staging_foundation_contract" {
       output.compute_contract.cross_zone_subnet_count == 2 &&
       output.compute_contract.audit_enabled &&
       output.compute_contract.event_persistence_enabled &&
-      output.compute_contract.audit_retention_days == 15
+      output.compute_contract.audit_retention_days == 15 &&
+      output.compute_contract.edge_access_retention_days == 15 &&
+      output.compute_contract.edge_clb_delete_protection &&
+      output.compute_contract.edge_clb_cross_zone &&
+      output.compute_contract.edge_clb_public_ipv4 &&
+      output.compute_contract.edge_clb_pass_to_target &&
+      output.compute_contract.edge_clb_bandwidth_mbps == 20 &&
+      output.compute_contract.edge_public_ports == [80, 443]
     )
     error_message = "TKE must remain private, deletion-protected, cross-zone and audit-enabled."
   }

@@ -41,6 +41,32 @@ resource "tencentcloud_cls_topic" "tke_event" {
   }
 }
 
+resource "tencentcloud_cls_logset" "edge" {
+  logset_name = "${var.name_prefix}-edge"
+  tags        = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "tencentcloud_cls_topic" "edge_access" {
+  topic_name           = "${var.name_prefix}-edge-access"
+  logset_id            = tencentcloud_cls_logset.edge.id
+  auto_split           = true
+  max_split_partitions = 20
+  partition_count      = 1
+  period               = 15
+  storage_type         = "hot"
+  describes            = "AI Wardrobe Staging public CLB access log"
+  encryption           = 1
+  tags                 = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "tencentcloud_eip" "nat" {
   name                       = "${var.name_prefix}-nat"
   type                       = "EIP"
@@ -128,6 +154,76 @@ resource "tencentcloud_security_group_rule_set" "tke_endpoint" {
     port        = "ALL"
     description = "Allow the managed endpoint to communicate with cluster nodes"
   }
+}
+
+resource "tencentcloud_security_group" "edge" {
+  name        = "${var.name_prefix}-edge"
+  description = "AI Wardrobe Staging public HTTPS CLB"
+  tags        = var.tags
+}
+
+resource "tencentcloud_security_group_rule_set" "edge" {
+  security_group_id = tencentcloud_security_group.edge.id
+
+  ingress {
+    action      = "ACCEPT"
+    cidr_block  = "0.0.0.0/0"
+    protocol    = "TCP"
+    port        = "80"
+    description = "Allow public HTTP only for method-preserving redirect to HTTPS"
+  }
+
+  ingress {
+    action      = "ACCEPT"
+    cidr_block  = "0.0.0.0/0"
+    protocol    = "TCP"
+    port        = "443"
+    description = "Allow public HTTPS API traffic"
+  }
+
+  ingress {
+    action      = "DROP"
+    cidr_block  = "0.0.0.0/0"
+    protocol    = "ALL"
+    port        = "ALL"
+    description = "Deny every other public CLB inbound connection"
+  }
+
+  dynamic "egress" {
+    for_each = var.app_subnet_cidrs
+    content {
+      action      = "ACCEPT"
+      cidr_block  = egress.value
+      protocol    = "ALL"
+      port        = "ALL"
+      description = "Allow CLB forwarding only to an application subnet"
+    }
+  }
+}
+
+resource "tencentcloud_clb_instance" "edge" {
+  network_type                 = "OPEN"
+  clb_name                     = "${var.name_prefix}-edge"
+  project_id                   = 0
+  vpc_id                       = var.vpc_id
+  address_ip_version           = "IPV4"
+  internet_charge_type         = "TRAFFIC_POSTPAID_BY_HOUR"
+  internet_bandwidth_max_out   = var.edge_clb_bandwidth_mbps
+  sla_type                     = "clb.c2.medium"
+  master_zone_id               = var.primary_availability_zone
+  slave_zone_id                = var.standby_availability_zone
+  security_groups              = [tencentcloud_security_group.edge.id]
+  load_balancer_pass_to_target = true
+  delete_protect               = true
+  log_set_id                   = tencentcloud_cls_logset.edge.id
+  log_topic_id                 = tencentcloud_cls_topic.edge_access.id
+  tags                         = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [tencentcloud_security_group_rule_set.edge]
 }
 
 resource "tencentcloud_kubernetes_cluster" "staging" {

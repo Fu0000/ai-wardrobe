@@ -14,6 +14,9 @@
   删除保护。
 - TKE 审计和 Kubernetes Event 分别写入 KMS 加密 CLS Topic，并保留 15 天；匿名
   OIDC Discovery RBAC 不会自动创建。
+- Terraform 预建固定 IPv4 公网 CLB，跨主/备可用区、启用删除保护和 `prevent_destroy`，
+  仅在安全组开放 80/443；80 只用于 307 跳转 HTTPS。CLB 访问日志写入 KMS 加密且
+  保留 15 天的独立 CLS Topic。
 - PostgreSQL 固定主版本 18，真实 Plan 动态检查目标地域的版本/规格可用性；Primary 与
   Standby 跨可用区，启用 TDE、TLS、删除保护以及 14 天物理/日志备份。
 - Redis 固定 7.0 标准架构、1 GiB、两个跨区副本，启用认证、TLS、每日备份和维护窗口，
@@ -81,7 +84,8 @@ make terraform-staging-plan
 ```
 
 Plan 后仍不自动 Apply。Apply 必须由另一位 Reviewer 核对 Plan SHA、月成本、TKE/CVM
-区域容量、CAM Role、CIDR、CORS Origin 和远程状态配置，并确认应用连接串使用
+区域容量、CLB 主备区/带宽、安全组、CAM Role、CIDR、CORS Origin 和远程状态配置，
+并确认应用连接串使用
 PostgreSQL `sslmode=verify-full` 与 Redis `rediss://...?ssl_cert_reqs=required`。禁止
 使用 `-auto-approve`，禁止把 `*.tfplan`、状态、凭据或实际 Bucket 名提交到 Git。
 
@@ -92,13 +96,15 @@ PostgreSQL 与 Redis CA 分别写入 `ai-wardrobe-data-ca` 的 `postgresql-ca.pe
 TKE 私网 Kubeconfig 只能进入 VPC 内、带 `ai-wardrobe-staging` 标签的临时
 self-hosted GitHub Runner。`Deploy Staging` 和 `AI Canary Staging` 不再允许公网
 GitHub-hosted Runner 访问控制面；Runner 必须一次一实例、任务后销毁，不得与 Production
-复用。建立该 Runner 和公网 HTTPS CLB/域名/证书仍需云账号、GitHub 注册凭据和审批，
-不在本模块中静态保存。
+复用。固定公网 CLB 已由 Terraform 声明；建立 Runner、将 DNS 指向 `edge_clb_vips`
+并绑定覆盖精确域名的既有证书，仍需云账号、GitHub 注册凭据和审批。证书私钥不得进入
+Terraform、GitHub 或 Kubernetes，本模块和 Ingress 只引用证书 ID。
 
 ## 当前不代表完成
 
 `terraform validate` 只证明语法和 Provider Schema 合法。INF-02 在 API、PostgreSQL、
-Redis、COS、CLS 与 TKE 真正部署，VPC 内临时 Runner 可部署，并完成连通性/故障注入后
+Redis、COS、CLS、CLB 与 TKE 真正部署，VPC 内临时 Runner 可部署，HTTPS/DNS/证书校验
+通过，并完成连通性/故障注入后
 才能转为 `DONE`；AST-01 在真实
 私有 Bucket 上完成上传、读取隔离、Signed URL 过期与删除后旧 URL 失效审计后才能解除
 `BLOCKED`。

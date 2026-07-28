@@ -46,4 +46,24 @@ def test_private_tke_workflows_require_the_vpc_runner() -> None:
         assert "self-hosted" in workflow
         assert "ai-wardrobe-staging" in workflow
         assert "runs-on: ubuntu-latest" not in workflow
-        assert 'rm -f "$RUNNER_TEMP/kubeconfig"' in workflow
+        assert '"$RUNNER_TEMP/kubeconfig"' in workflow
+
+
+def test_staging_deploy_requires_fixed_https_edge_and_server_dry_run() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy-staging.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for marker in (
+        "infra/k8s/staging",
+        "tke-ingress-controller-config",
+        "STAGING_API_HOST",
+        "STAGING_TLS_CERT_ID",
+        "STAGING_EDGE_CLB_ID",
+        "staging_manifests.py",
+        "--dry-run=server",
+        "--proto '=https'",
+        "--tlsv1.2",
+        'test "$redirect_code" = "307"',
+    ):
+        assert marker in workflow

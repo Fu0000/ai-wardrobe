@@ -15,6 +15,13 @@ OpenTelemetry remain mandatory.
 
 All containers run as UID/GID `10001`, drop Linux capabilities, disable privilege escalation, use a read-only root filesystem, and write temporary state only to bounded `/tmp` volumes.
 
+`base/` intentionally exposes only a `ClusterIP`. `staging/` adds the Tencent
+TKE `qcloud` Ingress and must be rendered by the fail-closed deployment tool;
+applying the placeholder file directly is invalid. The Ingress reuses the fixed
+Terraform-managed public CLB, binds one existing Tencent SSL certificate, listens
+only on 80/443, redirects HTTP with method-preserving 307, and enables CLB
+deletion protection. The TKE Ingress Controller must be v2.11.0 or newer.
+
 ## Required cluster state
 
 Create both `ai-wardrobe-secrets` and `ai-wardrobe-data-ca` from
@@ -29,11 +36,20 @@ The GitHub `staging` environment must provide:
 - `STAGING_API_BASE_URL`
 - `GHCR_PULL_USERNAME`
 - `GHCR_PULL_TOKEN`
+- variable `STAGING_API_HOST`, the exact lowercase DNS name without scheme/path
+- variable `STAGING_TLS_CERT_ID`, the existing Tencent SSL server certificate ID
+- variable `STAGING_EDGE_CLB_ID`, exactly matching Terraform output `edge_clb_id`
 - variable `STAGING_TRUSTED_PROXY_CIDRS_JSON`, a non-empty JSON list containing only
   the exact source CIDRs used by the cluster ingress/load-balancer when connecting
   to the API (for example `["10.42.7.0/24"]`)
 
 Protect the environment with required reviewers. The cluster identity should be scoped to the `ai-wardrobe` namespace.
+
+Before the first application deployment, point the `STAGING_API_HOST` DNS A
+record at every address in Terraform output `edge_clb_vips`, wait for public
+resolution, and confirm the certificate is issued, unexpired, covers the exact
+host, and belongs to the same Tencent account. Do not upload private-key material
+to Kubernetes: TKE references only the certificate ID.
 
 The edge proxy must discard any client-supplied forwarding headers and append its
 observed source address to `X-Forwarded-For`. The API ignores forwarding headers
@@ -44,10 +60,18 @@ uses the rightmost untrusted hop for rate limiting and audit logs.
 
 `deploy-staging.yml` builds the image with provenance and an SBOM, validates and
 applies the trusted-proxy contract, creates the registry pull Secret, runs
-migrations, waits for migration success, applies all workloads with the immutable
-commit SHA image, waits for every rollout, then calls `/health/ready`.
+migrations, and renders the Staging overlay only after checking the image SHA,
+HTTPS origin, host, certificate, fixed CLB and Ingress Controller version. It
+performs a server-side dry run before applying, waits for every rollout, proves
+the Ingress uses the expected CLB and DNS, verifies certificate/hostname trust,
+HSTS and the 307 HTTP redirect, then calls `/health/ready`.
 
 If migration or readiness fails, the workflow stops. Do not bypass the migration gate or replace an immutable SHA tag.
+
+The CLB and Ingress both have deletion protection. Planned edge removal requires
+a separate approved change that first drains traffic, archives evidence, removes
+the Ingress protection annotation, and only then disables Terraform protection;
+ordinary application rollback must never delete the edge.
 
 ## Rollback
 
