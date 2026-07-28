@@ -6,8 +6,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.config import Settings
 from app.modules.assets.models import SourcePhoto, UserAsset
 from app.modules.diagnosis.models import StyleDiagnosis, StyleOptimizationResult
+from app.modules.events.server import (
+    ServerEventContext,
+    build_server_event_values,
+)
 from app.modules.growth.models import (
     ShareRecord,
     UserEvent,
@@ -46,8 +51,16 @@ class VoteTally:
 
 
 class GrowthRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        settings: Settings | None = None,
+        event_context: ServerEventContext | None = None,
+    ) -> None:
         self._session = session
+        self._settings = settings
+        self._event_context = event_context or ServerEventContext()
 
     async def create_share(
         self,
@@ -240,24 +253,29 @@ class GrowthRepository:
         self,
         *,
         event_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         event_name: str,
         entity_type: str,
         entity_id: UUID,
         dedupe_key: str,
         properties: dict[str, object],
     ) -> bool:
+        if self._settings is None:
+            raise RuntimeError("GrowthRepository event recording requires settings")
+        values = build_server_event_values(
+            settings=self._settings,
+            context=self._event_context,
+            subject_user_id=user_id,
+            event_name=event_name,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            dedupe_key=dedupe_key,
+            properties=properties,
+            event_id=event_id,
+        )
         statement = (
             insert(UserEvent)
-            .values(
-                id=event_id,
-                user_id=user_id,
-                event_name=event_name,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                dedupe_key=dedupe_key,
-                properties=properties,
-            )
+            .values(**values)
             .on_conflict_do_nothing(constraint="uq_user_events_name_dedupe")
             .returning(UserEvent.id)
         )

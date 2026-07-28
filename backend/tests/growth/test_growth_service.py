@@ -174,7 +174,7 @@ class FakeGrowthRepository:
         self,
         *,
         event_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         event_name: str,
         entity_type: str,
         entity_id: UUID,
@@ -412,7 +412,10 @@ async def test_share_open_and_continue_attribution_are_deduplicated() -> None:
         "growth.continue.clicked",
     }
     opened = next(event for event in growth.events if event["event_name"] == "share.scene.opened")
-    assert opened["properties"] == {"attribution_source": "WECHAT_TIMELINE"}
+    assert opened["properties"] == {
+        "share_id": str(created.share.id),
+        "attribution_source": "WECHAT_TIMELINE",
+    }
 
 
 @pytest.mark.asyncio
@@ -451,8 +454,14 @@ async def test_share_invocation_is_deduplicated_per_user_and_channel() -> None:
     assert friend is True
     invoked = [event for event in growth.events if event["event_name"] == "share.wechat.invoked"]
     assert [event["properties"] for event in invoked] == [
-        {"attribution_source": "WECHAT_TIMELINE"},
-        {"attribution_source": "WECHAT_FRIEND"},
+        {
+            "share_id": str(created.share.id),
+            "attribution_source": "WECHAT_TIMELINE",
+        },
+        {
+            "share_id": str(created.share.id),
+            "attribution_source": "WECHAT_FRIEND",
+        },
     ]
 
 

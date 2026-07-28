@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.core.config import Settings
+from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.assets.models import AssetKind
 from app.modules.assets.repository import AssetRepository
@@ -12,6 +13,10 @@ from app.modules.assets.storage import (
     ObjectNotFoundError,
     ObjectStorageUnavailableError,
     build_object_storage,
+)
+from app.modules.events.server import (
+    ServerEventContext,
+    elapsed_milliseconds,
 )
 from app.modules.growth.images import ShareImage, ShareImageError, render_share_card
 from app.modules.growth.models import ShareStatus
@@ -243,7 +248,15 @@ class ShareAssetExecutor:
         rendered: ShareImage,
     ) -> bool:
         async with self._database.session_factory() as session:
-            repository = GrowthRepository(session)
+            repository = GrowthRepository(
+                session,
+                settings=self._settings,
+                event_context=ServerEventContext(
+                    request_id=f"job:{job_id}",
+                    trace_id=current_trace_fields().get("trace_id", "unavailable"),
+                    app_channel="worker",
+                ),
+            )
             context = await repository.execution_context(
                 job_id=job_id,
                 for_update=True,
@@ -286,12 +299,7 @@ class ShareAssetExecutor:
             context.share.expires_at = datetime.now(UTC) + timedelta(
                 days=self._settings.share_ttl_days
             )
-            latency_ms = (
-                round((datetime.now(UTC) - context.job.started_at).total_seconds() * 1_000)
-                if context.job.started_at is not None
-                else None
-            )
-            await GrowthRepository(session).record_event(
+            await repository.record_event(
                 event_id=uuid4(),
                 user_id=context.share.user_id,
                 event_name="share.asset.created",
@@ -299,7 +307,10 @@ class ShareAssetExecutor:
                 entity_id=context.share.id,
                 dedupe_key=str(context.share.id),
                 properties={
-                    "latency_ms": latency_ms,
+                    "share_id": str(context.share.id),
+                    "latency_ms": elapsed_milliseconds(
+                        context.job.started_at or context.job.created_at,
+                    ),
                     "template_version": context.share.public_payload.get(
                         "template_version",
                         "UNKNOWN",

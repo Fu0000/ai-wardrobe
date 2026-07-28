@@ -177,9 +177,10 @@ class GrowthApplicationService:
                 entity_id=view.share.id,
                 dedupe_key=f"{view.share.id}:{fingerprint}",
                 properties={
+                    "share_id": str(view.share.id),
                     "attribution_source": (
                         attribution_source or view.share.attribution_source or "UNKNOWN"
-                    )
+                    ),
                 },
             )
         return ShareDetails(
@@ -227,7 +228,10 @@ class GrowthApplicationService:
                 entity_type="ShareRecord",
                 entity_id=view.share.id,
                 dedupe_key=f"{view.share.id}:{fingerprint}:{choice.value}",
-                properties={"choice": choice.value},
+                properties={
+                    "share_id": str(view.share.id),
+                    "choice": choice.value,
+                },
             )
         return VoteResult(
             share=view.share,
@@ -263,7 +267,10 @@ class GrowthApplicationService:
             entity_type="ShareRecord",
             entity_id=view.share.id,
             dedupe_key=f"{view.share.id}:{fingerprint}:{attribution_source}",
-            properties={"attribution_source": attribution_source},
+            properties={
+                "share_id": str(view.share.id),
+                "attribution_source": attribution_source,
+            },
         )
 
     async def record_continue(
@@ -292,5 +299,8 @@ class GrowthApplicationService:
             entity_type="ShareRecord",
             entity_id=view.share.id,
             dedupe_key=f"{view.share.id}:{fingerprint}",
-            properties={"attribution_source": view.share.attribution_source or "UNKNOWN"},
+            properties={
+                "share_id": str(view.share.id),
+                "attribution_source": view.share.attribution_source or "UNKNOWN",
+            },
         )

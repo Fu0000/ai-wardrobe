@@ -10,9 +10,10 @@ from app.api.dependencies import get_session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.rate_limit import RateLimitGuard
-from app.core.telemetry import record_product_action
+from app.core.telemetry import current_trace_fields, record_product_action
 from app.modules.assets.models import AssetKind, AssetStatus
 from app.modules.assets.storage import ObjectStorageUnavailableError
+from app.modules.events.server import ServerEventContext
 from app.modules.growth.models import ShareStatus, VoteChoice
 from app.modules.growth.repository import GrowthRepository, ShareView, VoteTally
 from app.modules.growth.service import (
@@ -132,9 +133,25 @@ class ShareInvocationResponse(BaseModel):
     recorded: bool
 
 
-def _service(session: AsyncSession, settings: Settings) -> GrowthApplicationService:
+def _event_context(request: Request) -> ServerEventContext:
+    return ServerEventContext(
+        request_id=str(getattr(request.state, "request_id", "unavailable")),
+        trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        app_channel="api",
+    )
+
+
+def _service(
+    session: AsyncSession,
+    settings: Settings,
+    event_context: ServerEventContext,
+) -> GrowthApplicationService:
     return GrowthApplicationService(
-        growth_repository=GrowthRepository(session),
+        growth_repository=GrowthRepository(
+            session,
+            settings=settings,
+            event_context=event_context,
+        ),
         optimization_repository=OptimizationRepository(session),
         job_repository=JobRepository(session),
         settings=settings,
@@ -246,7 +263,7 @@ async def create_share(
     guard: RateLimitGuard = request.app.state.rate_limit_guard
     await guard.enforce_costly_action(str(user.id))
     settings: Settings = request.app.state.settings
-    service = _service(session, settings)
+    service = _service(session, settings, _event_context(request))
     try:
         created: CreatedShare = await service.create_share(
             user_id=user.id,
@@ -288,6 +305,7 @@ async def get_share(
         details: ShareDetails = await _service(
             session,
             request.app.state.settings,
+            _event_context(request),
         ).get_share(
             scene_code=scene_code,
             viewer_user_id=user.id,
@@ -312,7 +330,11 @@ async def create_vote(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> VoteResponse:
     try:
-        result = await _service(session, request.app.state.settings).vote(
+        result = await _service(
+            session,
+            request.app.state.settings,
+            _event_context(request),
+        ).vote(
             scene_code=payload.scene_code,
             user_id=user.id,
             choice=payload.choice,
@@ -360,6 +382,7 @@ async def record_share_invocation(
         recorded = await _service(
             session,
             request.app.state.settings,
+            _event_context(request),
         ).record_share_invocation(
             scene_code=scene_code,
             user_id=user.id,
@@ -388,6 +411,7 @@ async def record_continue(
         attributed = await _service(
             session,
             request.app.state.settings,
+            _event_context(request),
         ).record_continue(
             scene_code=scene_code,
             user_id=user.id,
