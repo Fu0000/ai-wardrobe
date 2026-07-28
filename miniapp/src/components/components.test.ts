@@ -64,4 +64,20 @@ describe("StateCard", () => {
     expect(wrapper.find("button").exists()).toBe(false);
     expect(wrapper.classes()).toContain("state-card--compact");
   });
+
+  it("keeps empty states visually distinct from failures", () => {
+    const wrapper = mount(StateCard, {
+      props: {
+        kind: "empty",
+        mark: "空",
+        title: "还没有后台任务",
+        message: "创建任务后会在这里继续。",
+      },
+    });
+
+    expect(wrapper.attributes("role")).toBe("status");
+    expect(wrapper.classes()).toContain("state-card--empty");
+    expect(wrapper.text()).toContain("还没有后台任务");
+    expect(wrapper.find("button").exists()).toBe(false);
+  });
 });

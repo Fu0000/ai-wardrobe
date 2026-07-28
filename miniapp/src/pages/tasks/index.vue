@@ -2,6 +2,7 @@
 import { storeToRefs } from "pinia";
 
 import ProgressTrack from "@/components/ProgressTrack.vue";
+import StateCard from "@/components/StateCard.vue";
 import { useJobPolling } from "@/composables/useJobPolling";
 import { presentJobStage } from "@/lib/job-progress";
 import { type Job } from "@/services/jobs";
@@ -116,11 +117,15 @@ const openJob = (job: Job) => {
       </button>
     </view>
 
-    <view v-else class="empty-state">
-      <text class="empty-state__mark">{{ refreshing ? "…" : "空" }}</text>
-      <text class="empty-state__title">还没有后台任务</text>
-      <text class="empty-state__copy">创建诊断后，即使离开页面也会在这里继续。</text>
-    </view>
+    <StateCard
+      v-else
+      kind="empty"
+      density="spacious"
+      spacing="section"
+      :mark="refreshing ? '…' : '空'"
+      title="还没有后台任务"
+      message="创建诊断后，即使离开页面也会在这里继续。"
+    />
   </view>
 </template>
 
@@ -206,44 +211,6 @@ const openJob = (job: Job) => {
     margin-top: 24rpx;
     color: $color-ink;
     font-size: 28rpx;
-  }
-}
-
-.empty-state {
-  margin-top: 60rpx;
-  padding: 72rpx 36rpx;
-  border: 1rpx dashed rgba($color-ink, 0.2);
-  border-radius: $radius-large;
-  text-align: center;
-
-  &__mark {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 74rpx;
-    height: 74rpx;
-    margin: 0 auto;
-    border-radius: 50%;
-    background: $color-paper-deep;
-    color: $color-sage-deep;
-    font-family: "Songti SC", serif;
-    font-size: 26rpx;
-  }
-
-  &__title {
-    display: block;
-    margin-top: 24rpx;
-    color: $color-ink;
-    font-size: 28rpx;
-    font-weight: 700;
-  }
-
-  &__copy {
-    display: block;
-    margin-top: 12rpx;
-    color: $color-muted;
-    font-size: 21rpx;
-    line-height: 1.6;
   }
 }
 

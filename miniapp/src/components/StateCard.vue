@@ -112,6 +112,10 @@ defineEmits<{
     box-shadow: $shadow-soft;
   }
 
+  &--empty {
+    border-style: dashed;
+  }
+
   &__mark {
     display: flex;
     align-items: center;
@@ -163,6 +167,10 @@ defineEmits<{
     &::after {
       border: 0;
     }
+  }
+
+  &--empty &__mark {
+    color: $color-sage-deep;
   }
 
   &--light &__action {
