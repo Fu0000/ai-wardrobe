@@ -16,6 +16,7 @@ run_tests() {
 run_lint() {
   aiw_require_command uv
   aiw_require_command pnpm
+  "${AIW_SCRIPT_DIR}/lib/common.test.sh"
   "${AIW_SCRIPT_DIR}/check-structure.sh"
   "${AIW_SCRIPT_DIR}/check-docs.sh"
   cd "${AIW_REPO_ROOT}/backend"

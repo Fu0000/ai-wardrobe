@@ -49,7 +49,12 @@ aiw_run_logged() {
   printf '==> 日志: %s\n' "${log_file}"
 
   set +e
-  "$@" 2>&1 | tee -a "${log_file}"
+  (
+    # aiw_run_logged 的调用方必须能依赖 errexit。若直接把 shell 函数放进
+    # pipeline，外层的 set +e 会让函数内前置失败被后续成功命令掩盖。
+    set -Eeuo pipefail
+    "$@"
+  ) 2>&1 | tee -a "${log_file}"
   local command_status="${PIPESTATUS[0]}"
   set -e
 
