@@ -21,7 +21,7 @@ from app.modules.governance.models import (
 )
 from app.modules.identity.models import User
 from app.modules.jobs.models import GenerationJob, JobStatus, JobTaskType
-from app.modules.jobs.reaper import STALE_JOB_ERROR_CODE, StaleJobReaper
+from app.modules.jobs.runtime.reaper import STALE_JOB_ERROR_CODE, StaleJobReaper
 from tests.integration.markers import requires_services
 
 pytestmark = requires_services

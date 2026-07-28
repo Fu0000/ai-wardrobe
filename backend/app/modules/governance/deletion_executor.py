@@ -14,8 +14,8 @@ from app.modules.governance.deletion_repository import (
     DeletionRepository,
 )
 from app.modules.governance.models import DeletionStatus, DeletionType
-from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.models import JobStatus
+from app.modules.jobs.runtime.execution import JobExecutionHarness
 from app.modules.jobs.state_machine import transition_job
 
 

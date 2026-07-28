@@ -19,8 +19,8 @@ from app.modules.growth.repository import (
     GrowthRepository,
     ShareExecutionContext,
 )
-from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.models import JobStatus
+from app.modules.jobs.runtime.execution import JobExecutionHarness
 from app.modules.jobs.state_machine import transition_job
 
 

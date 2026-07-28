@@ -14,7 +14,7 @@ import pytest
 from app.core.config import Settings
 from app.modules.governance.quota import QuotaError
 from app.modules.jobs.models import GenerationJob, JobStatus, JobTaskType
-from app.modules.jobs.reaper import (
+from app.modules.jobs.runtime.reaper import (
     REAPABLE_JOB_STATUSES,
     STALE_JOB_ERROR_CODE,
     StaleJobReaper,
@@ -95,7 +95,10 @@ class _RecordingQuota:
 def _reset_quota_recorder(monkeypatch: pytest.MonkeyPatch) -> None:
     _RecordingQuota.released = []
     _RecordingQuota.raise_not_found = False
-    monkeypatch.setattr("app.modules.jobs.reaper.QuotaRepository", _RecordingQuota)
+    monkeypatch.setattr(
+        "app.modules.jobs.runtime.reaper.QuotaRepository",
+        _RecordingQuota,
+    )
 
 
 def _reaper(jobs: list[GenerationJob]) -> tuple[StaleJobReaper, _FakeSession]:
@@ -177,7 +180,10 @@ async def test_unexpected_quota_error_is_not_swallowed(
 
     job = _job(lease_expires_at=datetime.now(UTC) - timedelta(hours=2))
     reaper, _ = _reaper([job])
-    monkeypatch.setattr("app.modules.jobs.reaper.QuotaRepository", _Underflow)
+    monkeypatch.setattr(
+        "app.modules.jobs.runtime.reaper.QuotaRepository",
+        _Underflow,
+    )
 
     with pytest.raises(QuotaError) as excinfo:
         await reaper.reap_once()

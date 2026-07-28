@@ -29,9 +29,9 @@ from app.modules.assets.storage import (
 )
 from app.modules.diagnosis.models import OptimizationStatus
 from app.modules.governance.quota import QuotaRepository
-from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
+from app.modules.jobs.runtime.execution import JobExecutionHarness
 from app.modules.jobs.state_machine import transition_job
 from app.modules.optimization.images import (
     GeneratedImageMetadata,

@@ -14,7 +14,7 @@ from app.modules.governance.deletion_executor import (
     RetryableDeletionError,
 )
 from app.modules.growth.executor import RetryableShareError, ShareAssetExecutor
-from app.modules.jobs.reaper import StaleJobReaper
+from app.modules.jobs.runtime.reaper import StaleJobReaper
 from app.modules.optimization.executor import (
     OptimizationExecutor,
     RetryableOptimizationError,

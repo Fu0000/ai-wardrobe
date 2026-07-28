@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.models import GenerationJob, JobStatus, JobTaskType
+from app.modules.jobs.runtime.execution import JobExecutionHarness
 
 
 def job(status: JobStatus) -> GenerationJob:

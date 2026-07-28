@@ -27,9 +27,9 @@ from app.modules.diagnosis.repository import (
 )
 from app.modules.diagnosis.schema import DiagnosisOutput, InputQuality
 from app.modules.governance.quota import QuotaRepository
-from app.modules.jobs.execution import JobExecutionHarness
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
+from app.modules.jobs.runtime.execution import JobExecutionHarness
 from app.modules.jobs.state_machine import transition_job
 
 
