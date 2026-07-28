@@ -29,7 +29,11 @@ jobs:
         github.event.workflow_run.head_branch == 'main'
       )
     name: Build, migrate, and deploy
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-wardrobe-staging
     timeout-minutes: 25
     environment: staging
     steps:
@@ -167,3 +171,7 @@ jobs:
             --retry-all-errors \
             --retry-delay 3 \
             "${STAGING_API_BASE_URL%/}/health/ready"
+
+      - name: Remove cluster credential
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/kubeconfig"

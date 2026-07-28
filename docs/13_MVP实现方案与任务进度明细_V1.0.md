@@ -549,12 +549,16 @@ API 创建业务记录与 OutboxEvent
   仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
 - W6 INF-02 代码证据：Staging-only Terraform 根模块已锁定 Terraform 与腾讯云
-  Provider 版本，固化私有 VPC/应用与数据子网、API/DB/Redis 最小入口安全组、私有
+  Provider 版本，固化私有 VPC、跨区应用/数据子网、API/DB/Redis 最小入口安全组、私有
   KMS 加密 COS、精确 HTTPS CORS、上传/运行时 CAM Role 分权、销毁保护与远程状态
   操作合同；Managed PostgreSQL 固定 18、跨区 Standby、TDE/TLS、14 天物理/日志备份，
   Managed Redis 固定 7.0 双副本、TLS/备份/无公网，应用部署配置强制
   PostgreSQL `verify-full` 与 Redis `rediss`；CI 执行无凭据 Schema 和 Mock Plan
-  合同校验。TKE、真实 Plan/Apply、云上连通性和成本复核仍待后续批次及审批。
+  合同校验；TKE 使用私网控制面、跨区 2～4 节点、无节点公网 IP、标准 NAT 出站、
+  删除保护和保留 15 天的 KMS 加密 CLS Audit/Event。受保护的手动工作流仅允许从
+  `develop` 执行真实只读 Plan、分离 Provider/State 凭据且不会上传敏感 Plan；部署与
+  AI Canary 已拒绝公网 Runner，限定 VPC 内临时 Runner。真实 Plan/Apply、临时 Runner、
+  公网 HTTPS 入口、云上连通性和成本复核仍待账号、域名、证书与审批。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
   含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
   过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。

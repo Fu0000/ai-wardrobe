@@ -80,6 +80,14 @@ run "staging_foundation_contract" {
     postgresql_root_password = "PgStaging#2026Strong"
     redis_password           = "Redis#2026Aa"
     redis_replica_zone_ids   = [100006, 100007]
+    tke_cluster_version      = "1.30.0"
+    tke_node_instance_type   = "SA5.MEDIUM4"
+    tke_backup_instance_types = [
+      "S5.MEDIUM4",
+    ]
+    tke_ssh_key_ids = [
+      "skey-test000001",
+    ]
   }
 
   assert {
@@ -157,5 +165,29 @@ run "staging_foundation_contract" {
       output.data_service_contract.redis_replicas == 2
     )
     error_message = "Redis must remain version 7.0, private, TLS-enabled and replicated."
+  }
+
+  assert {
+    condition = (
+      output.compute_contract.cluster_private_only &&
+      output.compute_contract.cluster_deletion_protection &&
+      output.compute_contract.node_public_ip == false &&
+      output.compute_contract.node_min_size == 2 &&
+      output.compute_contract.node_max_size == 4 &&
+      output.compute_contract.cross_zone_subnet_count == 2 &&
+      output.compute_contract.audit_enabled &&
+      output.compute_contract.event_persistence_enabled &&
+      output.compute_contract.audit_retention_days == 15
+    )
+    error_message = "TKE must remain private, deletion-protected, cross-zone and audit-enabled."
+  }
+
+  assert {
+    condition = (
+      output.compute_contract.pod_cidr == "172.20.0.0/16" &&
+      output.compute_contract.service_cidr == "172.21.0.0/20" &&
+      output.compute_contract.nat_product_version == 2
+    )
+    error_message = "TKE network ranges and managed NAT contract changed without review."
   }
 }

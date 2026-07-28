@@ -17,6 +17,15 @@ cos_runtime_role_id = "replace-with-runtime-role-id"
 # 先通过腾讯云 Redis 可用区配置查询确认两个数字 ID，禁止猜测或复用同一可用区。
 redis_replica_zone_ids = [100006, 100007]
 
+# 先从目标地域 TKE/CVM 控制台或 API 查询当前可用版本、跨区均有库存的主/备用机型。
+# 以下值仅展示格式，不代表账号或地域在执行时一定可售。
+tke_cluster_version       = "1.30.0"
+tke_node_instance_type    = "SA5.MEDIUM4"
+tke_backup_instance_types = ["S5.MEDIUM4"]
+
+# 使用既有 CVM SSH Key，节点不配置密码且不分配公网 IP。
+tke_ssh_key_ids = ["skey-replace0001"]
+
 # 密码不进入 tfvars。Plan 前通过受控 Secret 注入：
 # export TF_VAR_postgresql_root_password='<16～32 位随机强密码>'
 # export TF_VAR_redis_password='<12～16 位随机强密码>'

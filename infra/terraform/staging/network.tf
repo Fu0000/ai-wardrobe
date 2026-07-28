@@ -16,6 +16,15 @@ resource "tencentcloud_subnet" "app" {
   tags              = local.common_tags
 }
 
+resource "tencentcloud_subnet" "app_standby" {
+  name              = "${local.name_prefix}-app-standby"
+  vpc_id            = tencentcloud_vpc.staging.id
+  cidr_block        = local.app_standby_subnet_cidr
+  availability_zone = var.standby_availability_zone
+  is_multicast      = false
+  tags              = local.common_tags
+}
+
 resource "tencentcloud_subnet" "data" {
   name              = "${local.name_prefix}-data"
   vpc_id            = tencentcloud_vpc.staging.id
@@ -33,6 +42,14 @@ resource "tencentcloud_security_group" "app" {
 
 resource "tencentcloud_security_group_rule_set" "app" {
   security_group_id = tencentcloud_security_group.app.id
+
+  ingress {
+    action             = "ACCEPT"
+    source_security_id = tencentcloud_security_group.app.id
+    protocol           = "ALL"
+    port               = "ALL"
+    description        = "Allow required east-west traffic only between application nodes"
+  }
 
   dynamic "ingress" {
     for_each = var.api_ingress_source_cidrs

@@ -39,7 +39,11 @@ permissions:
 jobs:
   configure:
     name: Configure sticky AI cohort
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-wardrobe-staging
     timeout-minutes: 90
     environment: staging
     steps:
@@ -371,3 +375,7 @@ jobs:
             echo "- In-flight jobs: retain their persisted model policy snapshot"
             echo "- Next action: compare model-scoped quality, error, latency, and cost"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove cluster credential
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/kubeconfig"

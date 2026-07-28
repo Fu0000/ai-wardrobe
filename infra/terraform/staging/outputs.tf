@@ -8,6 +8,11 @@ output "app_subnet_id" {
   value       = tencentcloud_subnet.app.id
 }
 
+output "app_standby_subnet_id" {
+  description = "TKE 节点跨可用区使用的第二个应用私有子网 ID。"
+  value       = tencentcloud_subnet.app_standby.id
+}
+
 output "data_subnet_id" {
   description = "Managed PostgreSQL 与 Redis 私有子网 ID。"
   value       = tencentcloud_subnet.data.id
@@ -55,4 +60,21 @@ output "redis_instance_id" {
 output "data_service_contract" {
   description = "不含凭据的数据层安全与版本合同。"
   value       = module.data_services.contract
+}
+
+output "tke_cluster_id" {
+  description = "Staging TKE Cluster ID。"
+  value       = module.compute.cluster_id
+  sensitive   = true
+}
+
+output "tke_private_kubeconfig" {
+  description = "仅可进入受控 Secret 并注入 VPC 内临时部署 Runner 的私网 Kubeconfig，禁止写入日志。"
+  value       = module.compute.private_kubeconfig
+  sensitive   = true
+}
+
+output "compute_contract" {
+  description = "不含凭据的 TKE、NAT 与 CLS 安全合同。"
+  value       = module.compute.contract
 }

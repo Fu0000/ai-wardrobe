@@ -1,0 +1,88 @@
+name: Terraform Staging Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type I_ACKNOWLEDGE_STAGING_PLAN_READ_ONLY
+        required: true
+        type: string
+
+concurrency:
+  group: ai-wardrobe-staging-terraform-plan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Read-only cloud plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-infrastructure-plan
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Enforce protected branch and explicit confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$GITHUB_REF_NAME" = "develop"
+          test "$CONFIRMATION" = "I_ACKNOWLEDGE_STAGING_PLAN_READ_ONLY"
+
+      - name: Materialize ephemeral Terraform inputs
+        env:
+          BACKEND_CONFIG_B64: ${{ secrets.STAGING_TERRAFORM_BACKEND_CONFIG_B64 }}
+          TFVARS_B64: ${{ secrets.STAGING_TERRAFORM_TFVARS_B64 }}
+        run: |
+          test -n "$BACKEND_CONFIG_B64"
+          test -n "$TFVARS_B64"
+          install -d -m 700 "$RUNNER_TEMP/aiw-terraform-input"
+          install -d -m 700 "$RUNNER_TEMP/aiw-terraform-plan"
+          printf '%s' "$BACKEND_CONFIG_B64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/aiw-terraform-input/backend.hcl"
+          printf '%s' "$TFVARS_B64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/aiw-terraform-input/staging.tfvars"
+          chmod 600 \
+            "$RUNNER_TEMP/aiw-terraform-input/backend.hcl" \
+            "$RUNNER_TEMP/aiw-terraform-input/staging.tfvars"
+
+      - name: Run credentialed plan without apply
+        env:
+          AIW_TERRAFORM_PLAN_CONFIRMATION: I_ACKNOWLEDGE_STAGING_PLAN_READ_ONLY
+          AIW_TERRAFORM_BACKEND_CONFIG: ${{ runner.temp }}/aiw-terraform-input/backend.hcl
+          AIW_TERRAFORM_VAR_FILE: ${{ runner.temp }}/aiw-terraform-input/staging.tfvars
+          AIW_TERRAFORM_PLAN_OUTPUT_DIR: ${{ runner.temp }}/aiw-terraform-plan
+          TENCENTCLOUD_SECRET_ID: ${{ secrets.STAGING_TENCENTCLOUD_SECRET_ID }}
+          TENCENTCLOUD_SECRET_KEY: ${{ secrets.STAGING_TENCENTCLOUD_SECRET_KEY }}
+          TENCENTCLOUD_SECURITY_TOKEN: ${{ secrets.STAGING_TENCENTCLOUD_SECURITY_TOKEN }}
+          AIW_TERRAFORM_STATE_ACCESS_KEY_ID: ${{ secrets.STAGING_TERRAFORM_STATE_ACCESS_KEY_ID }}
+          AIW_TERRAFORM_STATE_SECRET_ACCESS_KEY: ${{ secrets.STAGING_TERRAFORM_STATE_SECRET_ACCESS_KEY }}
+          AIW_TERRAFORM_STATE_SESSION_TOKEN: ${{ secrets.STAGING_TERRAFORM_STATE_SESSION_TOKEN }}
+          TF_VAR_postgresql_root_password: ${{ secrets.STAGING_POSTGRESQL_ROOT_PASSWORD }}
+          TF_VAR_redis_password: ${{ secrets.STAGING_REDIS_PASSWORD }}
+        run: ./scripts/infra.sh terraform-staging-plan
+
+      - name: Record immutable review reference
+        run: |
+          {
+            echo "## Terraform Staging Plan"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Mode: read-only plan; no apply entrypoint was invoked"
+            echo "- Plan file: retained only for this job and never uploaded"
+            echo "- Result: command and provider checks passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Destroy ephemeral sensitive inputs
+        if: ${{ always() }}
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/aiw-terraform-input/backend.hcl" \
+            "$RUNNER_TEMP/aiw-terraform-input/staging.tfvars" \
+            "$RUNNER_TEMP/aiw-terraform-plan/staging.tfplan"
+          rmdir "$RUNNER_TEMP/aiw-terraform-input" 2>/dev/null || true
+          rmdir "$RUNNER_TEMP/aiw-terraform-plan" 2>/dev/null || true
