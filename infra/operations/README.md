@@ -47,6 +47,36 @@ verification code, writes its terminal output to `logs/`, and removes only the d
 and temporary backup artifacts. Local evidence does not replace managed backup/PITR or Staging
 restore approval.
 
+## Alert coverage and delivery drill
+
+Start the local observability profile and execute the non-destructive alert drill:
+
+```bash
+make infra-observability-up
+make local-alert-drill
+```
+
+The observability profile runs dedicated PostgreSQL and Redis exporters. Prometheus rules cover
+database and Redis availability, database and Redis connection usage, and Redis memory usage in
+addition to API, Worker, Provider, Outbox and deletion failures. The local Redis limit defaults to
+256 MiB so its memory alert has a meaningful capacity denominator.
+
+The drill verifies Prometheus and Alertmanager readiness, the five dependency rules, `pg_up=1`,
+`redis_up=1`, and Alertmanager alert creation and resolution. Its synthetic alert is removed before
+the command succeeds. Output is stored under `logs/`.
+
+This local drill deliberately does not claim notification delivery. Before Staging approval:
+
+1. Configure a real receiver through the platform secret manager; do not commit webhook URLs,
+   tokens, phone numbers or email credentials.
+2. Attach environment, cluster and service labels, and include a dashboard/runbook link in each
+   notification.
+3. Trigger one critical and one warning alert, confirm delivery to the named On-call person inside
+   the agreed window, acknowledge them, resolve them and retain the notification/response record.
+4. Confirm routing inhibition and repeat intervals prevent duplicate notification storms.
+
+`REL-005` and `OBS-02` remain incomplete until that Staging delivery evidence exists.
+
 ## AI model Canary and rollback
 
 The Staging workflow `AI Canary Staging` uses a deterministic hash of internal User ID to select a sticky 0/10/50/100% cohort. Candidate identifiers are non-secret ConfigMap values. Every newly created AI Job persists its resolved routes, timeout, cost ceiling, quality threshold, release track and optimization attempt limit.

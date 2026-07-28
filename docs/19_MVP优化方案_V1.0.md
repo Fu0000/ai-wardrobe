@@ -170,9 +170,16 @@
 
 ### GATE-03 告警可达性与依赖覆盖
 
-**证据**：`infra/observability/alerts.yml` 有 7 条规则，但 `alertmanager.yml` 唯一 receiver 是 `local-ui-only`，无外发路由；规则集中**无 PostgreSQL、无 Redis 告警**，而这是 `docs/13` 第 6.10 节的明确完成条件。
+**当前证据（2026-07-28）**：`infra/observability/alerts.yml` 已有 14 条规则；独立
+PostgreSQL/Redis Exporter 与五条依赖规则覆盖可用性、连接使用率和 Redis 内存水位。
+`make local-alert-drill` 已验证三个 Scrape Target、规则健康、合成告警注入和解除，API
+Readiness 指标也已通过 OTLP 在 Prometheus 查询。证据归档于
+`infra/operations/evidence/2026-07-28_local_alert_drill.md`。但 `alertmanager.yml`
+唯一 receiver 仍是 `local-ui-only`，尚无真实外发路由、环境标签和 On-call 响应记录。
 
-**方案**：通过平台密钥管理配置真实通知路由；补 DB 与 Redis 可用性、连接数、内存水位规则；完成一次告警送达演练并留存证据。
+**剩余方案**：通过平台密钥管理配置真实通知路由；在 Staging 注入 critical/warning
+故障，验证环境/服务/定位入口、抑制与重复通知策略，并由指定 On-call 确认、解除和留存
+响应记录。不得把本地 Alertmanager API 注入等同于人员送达。
 
 **验收**：`docs/16` 的 REL-005 转为 `PASS`。
 

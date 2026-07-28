@@ -482,7 +482,7 @@ API 创建业务记录与 OutboxEvent
   不重复计数、好友侧任务信息隔离，以及 Share Invoked/Open/Vote/Continue 去重归因事件。
 - W5 Growth 待验收：真实 COS 分享卡片、微信好友分享和打开、分享可见 P90、投票并发、低端安卓真机，以及归因漏斗查询。
 - W6 Privacy/Hardening 代码证据：账号与单图异步 DeletionJob、原图到诊断/优化/分享派生图的闭包清理、COS/DB 两阶段重试、删除竞态稳定检查、账号删除后的本地已保存照片和业务状态清理、依赖感知 Readiness、1 MiB JSON Body Limit、CORS 与安全响应头。
-- W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager 和七条告警规则。
+- W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product/依赖 Readiness 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager、PostgreSQL/Redis Exporter 和 14 条告警规则；本地演练已验证五条依赖规则、三个 Scrape Target、合成告警注入与解除，真实 On-call 外发仍待 Staging 验收。
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
 - W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
@@ -508,7 +508,9 @@ API 创建业务记录与 OutboxEvent
   反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意
   仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
-- W6 待验收：真实 COS 删除与 PostgreSQL 事务回归、OTLP Collector/Dashboard/告警路由、备份恢复、Canary/回滚、性能与安全测试、微信真机，以及 Go/No-Go 签署。
+- W6 待验收：真实 COS 删除与 PostgreSQL 事务回归、Staging OTLP/Dashboard 与真实
+  On-call 告警送达、含数据备份恢复、Canary/回滚、性能与安全测试、微信真机，以及
+  Go/No-Go 签署。
 
 ### 6.1 产品、设计与项目治理
 

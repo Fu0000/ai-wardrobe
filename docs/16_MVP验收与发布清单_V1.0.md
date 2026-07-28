@@ -130,7 +130,7 @@ unset AIW_SMOKE_ACCESS_TOKEN
 
 ## 六、发布 Gate
 
-| Gate | `GO` 标准 | 当前状态（2026-07-26） |
+| Gate | `GO` 标准 | 当前状态（2026-07-28） |
 |:---|:---|:---|
 | Scope | MVP 范围冻结，非目标未进入版本 | PASS |
 | Build | Lint、Type Check、Unit/Contract、微信构建、Migration 检查通过 | PASS（本地证据，需候选 SHA 重跑） |
@@ -138,7 +138,7 @@ unset AIW_SMOKE_ACCESS_TOKEN
 | Security/Privacy | 双账号隔离、私有 URL、删除闭包和日志脱敏通过 | BLOCKED：PostgreSQL 双用户隔离自动化已进入 CI，真实 CI/COS/删除闭包仍未验收 |
 | AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：缺授权数据和真实 Provider |
 | Staging E2E | 微信登录、COS、全部 Worker、分享投票和冒烟通过 | BLOCKED：缺 Staging 与凭据 |
-| Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | NOT_RUN |
+| Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复演练通过；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
 | Performance | 核心容量、P95、队列积压和低端安卓达标 | NOT_RUN |
 | Operations | Dashboard、On-call、Runbook、反馈入口和状态沟通就位 | NOT_RUN |
 | Defects | Blocker=0、Critical=0；Major 均有 Owner 和截止日 | PENDING |
