@@ -238,8 +238,8 @@ Docker 实库验证曾发现 `20260726_0004` 已创建
 | 首页假指示器 | 红点只在 `useJobStore.hasPendingJobs` 为真时显示，首页恢复时刷新任务 | 既有 Job Store 测试覆盖恢复任务与终态消除 |
 | 死代码 | 删除无读方的 `stores/app.ts` 及启动接线 | 全仓库引用扫描为零；小程序类型检查和构建通过 |
 
-门禁结果：后端 Ruff、严格 Mypy、Alembic 模型漂移检查通过；后端 210 个单元/
-契约测试与 24 个 PostgreSQL/Redis 集成测试通过；小程序 ESLint、类型检查、46 个
+门禁结果：后端 Ruff、严格 Mypy、Alembic 模型漂移检查通过；后端 250 个单元/
+契约/真实 PostgreSQL/Redis 测试通过；小程序 ESLint、类型检查、61 个
 测试与微信构建通过。朋友圈菜单与好友二次转发仍需在微信开发者工具和真机按
 `docs/16` 的 Growth 用例留存证据。
 
@@ -292,15 +292,23 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 
 ### ARCH-03 小程序抽取组件与 Composable
 
-**证据**：`miniapp/src` 下无 `components/` 与 `composables/` 目录，41 个源文件零可复用组件。轮询逻辑在 6 个页面各自实现（`diagnosis/index.vue`、`optimization/index.vue`、`tasks/index.vue`、`profile/deletion.vue`、`profile/photos.vue`、`share/confirm.vue`），每份都独立声明 `pollTimer`、`polling`、`pollAttempt` 三个模块级变量并手写递归 `setTimeout`；共享的仅有 `lib/job-progress.ts` 的退避函数。样式层面 `.progress-track`、`.state-card`、`.primary-action` 在 5 至 6 个页面各写一遍。
+状态：**已完成。**
 
-**方案**：
+- `composables/useJobPolling.ts` 已统一诊断、优化、任务中心、账号删除、照片删除和分享
+  确认六个页面的显示/隐藏/卸载生命周期、单定时器退避、进度变化重置、在途请求恢复与
+  旧代次结果隔离。4 个确定性测试覆盖隐藏后停止、恢复后续轮询、旧请求完成竞态与退避。
+- `StateCard.vue` 已在真实页面覆盖 loading / error / empty 三态；
+  `ProgressTrack.vue` 统一紧凑、标准和突出进度语义，并提供可访问的 progressbar 属性。
+  `PrimaryAction.vue` 与 `PrivacyNote.vue` 进一步收敛主页和结果页的重复交互样式。
+- `createJobBackedResourceStore` 已统一 diagnoses / optimizations / shares 的恢复、
+  接受、任务映射上限与持久化骨架，领域创建、错误与投票逻辑仍留在各自 Store。
+- `pages/index/index.vue` 从 854 行降到 789 行；对 `miniapp/src` 的 Vue/TypeScript
+  源文件扫描已无超过 800 行的文件，脚本职责未被无意义拆散。
 
-1. 抽 `composables/useJobPolling.ts`，统一生命周期与退避语义。
-2. 抽 `components/StateCard.vue`（loading / error / empty 三态）与 `components/ProgressTrack.vue`。
-3. 抽 `createJobBackedResourceStore` 工厂，收敛 `diagnoses` / `optimizations` / `shares` 三个同构 Store。
-
-`pages/index/index.vue` 共 850 行，但 `<script setup>` 仅 130 行、样式占 535 行。它的问题不是职责过重，而是缺少共享样式层 —— 因此拆分从组件与样式入手，脚本层不必动。
+自动化验证：小程序 13 个测试文件、61 个用例全部通过，ESLint、`vue-tsc`、微信小程序
+生产构建与 High 级生产依赖漏洞门禁通过。远端
+[CI run 30338199750](https://github.com/Fu0000/ai-wardrobe/actions/runs/30338199750)
+在 `develop@db08463` 上完成，Backend 与 Miniapp Job 均为 `success`。
 
 ### ARCH-04 规约对齐
 
@@ -308,7 +316,7 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 |---|---|---|
 | 启停统一走 `scripts/*.sh` | 无 `scripts/` 目录，全部经 Makefile 直调 `uv` / `pnpm` | 补脚本层，Makefile 转为调用脚本 |
 | 日志输出到 `logs/` | 无该目录 | 随脚本层一并建立 |
-| 单文件不超过 800 行 | `pages/index/index.vue` 850 行 | 由 ARCH-03 解决 |
+| 单文件不超过 800 行 | 最大文件 `pages/index/index.vue` 为 789 行 | ARCH-03 已解决 |
 | 每层目录不超过 8 个文件 | 7 个目录超限，最多 13 个 | 随模块重组处理 |
 | 项目级 `CLAUDE.md` 与 `docs/agent/` | 均缺失 | 补建，控制在 60 至 80 行 |
 
@@ -349,7 +357,7 @@ FIX-01、FIX-06 与 GATE-04 之间存在一条隐含主线：三者都指向「�
 - `docs/15` 第八节的埋点验收对每个 MVP 功能成立。
 - CI 中集成测试实际执行而非 skip。
 
-P2 条目不阻断封测；ARCH-01 与 ARCH-02 已完成，剩余架构债按封测期间的真实回归与维护
+P2 条目不阻断封测；ARCH-01、ARCH-02 与 ARCH-03 已完成，剩余架构债按封测期间的真实回归与维护
 成本继续排期。
 
 ## 九、明确不做

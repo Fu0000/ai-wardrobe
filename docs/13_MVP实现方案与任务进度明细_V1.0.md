@@ -436,7 +436,7 @@ API 创建业务记录与 OutboxEvent
 
 代码实现已启动。以下状态以验证证据为准；Owner 当前仍填写建议角色，进入团队协作时必须落实到具体人员。
 
-当前实施快照（2026-07-27）：
+当前实施快照（2026-07-28）：
 
 - 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
 - `DONE`：20 项。
@@ -448,20 +448,24 @@ API 创建业务记录与 OutboxEvent
 - 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 156 个文件）、250
   个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
-  小程序 ESLint、类型检查、46 个测试、微信构建与 High 依赖漏洞门禁。
+  小程序 ESLint、类型检查、61 个测试、微信构建与 High 依赖漏洞门禁。
   其中 24 个 PostgreSQL/Redis 集成测试已纳入 CI。
 - Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 24 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI run 30336655337](https://github.com/Fu0000/ai-wardrobe/actions/runs/30336655337)
-  在 `develop@0bb1dde` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30338199750](https://github.com/Fu0000/ai-wardrobe/actions/runs/30338199750)
+  在 `develop@db08463` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
   输入质量失败和诊断结果页。
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric；Optimization Executor 已按生成尝试、Critic 评审和结果持久化拆分，非预期编程异常不再降级成普通瞬时故障。
+- 小程序架构代码证据：六个后台任务页面已统一到 `useJobPolling` 生命周期与竞态隔离；
+  loading / error / empty 状态、进度条、主操作与隐私提示已抽为共享组件；
+  Diagnosis / Optimization / Share 的任务资源恢复已统一到 Job-backed Store 工厂；
+  最大源码文件为 789 行。
 - W4 待验收：真实 COS/OpenAI 图片编辑与 Critic 联调、50+ 授权 Before/After 样本、双人盲评、Critic First-pass、P90 和单位成本基线、微信真机保存图片。
 - W5 Growth 代码证据：独立 Share Derivative、EXIF 清理、AI 编辑标识、分享确认页、
   SceneCode、好友落地页与二次转发、好友/朋友圈渠道链接、HMAC 防重复投票、可改票
