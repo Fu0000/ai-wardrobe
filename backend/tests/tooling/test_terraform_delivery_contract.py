@@ -79,3 +79,5 @@ def test_staging_deploy_requires_fixed_https_edge_and_server_dry_run() -> None:
         'test "$redirect_code" = "307"',
     ):
         assert marker in workflow
+    assert "tr '[:upper:]' '[:lower:]'" in workflow
+    assert "ghcr.io/${{ github.repository_owner }}" not in workflow
