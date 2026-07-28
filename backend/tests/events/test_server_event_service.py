@@ -5,6 +5,7 @@ from app.core.config import Settings
 from app.modules.events.server import (
     ServerEventContext,
     build_server_event_values,
+    elapsed_milliseconds,
 )
 from app.modules.events.service import privacy_safe_user_hash
 
@@ -66,3 +67,18 @@ def test_server_event_can_retain_hash_without_user_foreign_key() -> None:
     assert values["user_id_hash"] == privacy_safe_user_hash(settings, user_id)
     assert values["platform"] == "server"
     assert values["app_channel"] == "server"
+
+
+def test_elapsed_milliseconds_is_utc_safe_and_never_negative() -> None:
+    ended_at = datetime(2026, 7, 28, 8, 0, 1, tzinfo=UTC)
+
+    assert (
+        elapsed_milliseconds(
+            datetime(2026, 7, 28, 8, 0, 0),
+            ended_at,
+        )
+        == 1_000
+    )
+    assert elapsed_milliseconds(ended_at, ended_at) == 0
+    assert elapsed_milliseconds(ended_at, datetime(2026, 7, 28, 8, 0, 0)) == 0
+    assert elapsed_milliseconds(None, ended_at) == 0

@@ -5,12 +5,14 @@ purge_account」，不依赖数据库；本文件在真实 PostgreSQL 上验证�
 零残留」，并确认清理是按用户收敛而非全表清空。两层互补，缺一不可。
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
+from app.database.session import Database
 from app.modules.assets.models import (
     AssetKind,
     AssetStatus,
@@ -26,6 +28,7 @@ from app.modules.diagnosis.models import (
 )
 from app.modules.events.models import OutboxEvent
 from app.modules.feedback.models import BetaFeedback, FeedbackCategory
+from app.modules.governance.deletion_executor import DeletionExecutor
 from app.modules.governance.deletion_repository import DeletionRepository
 from app.modules.governance.models import (
     DeletionJob,
@@ -150,6 +153,63 @@ async def test_beta_feedback_is_removed_on_account_purge(session: AsyncSession) 
         {"user_id": bystander.id},
     )
     assert result.scalar_one() == 1
+
+
+async def test_account_deletion_completion_survives_event_purge(
+    settings: Settings,
+    database: Database,
+    purge_users: list[UUID],
+) -> None:
+    owner = User(id=uuid4())
+    bystander = User(id=uuid4())
+    purge_users.extend([owner.id, bystander.id])
+    execution_token = str(uuid4())
+
+    async with database.session_factory() as setup:
+        setup.add_all([owner, bystander])
+        await setup.flush()
+        _, job = await _populate(
+            setup,
+            owner=owner,
+            bystander=bystander,
+        )
+        job.execution_token = execution_token
+        job.execution_lease_expires_at = datetime.now(UTC) + timedelta(minutes=5)
+        job.started_at = datetime.now(UTC) - timedelta(seconds=1)
+        object_keys = set(await DeletionRepository(setup).account_object_keys(user_id=owner.id))
+        await setup.commit()
+
+    decision = await DeletionExecutor(
+        settings=settings,
+        database=database,
+    )._complete_if_stable(
+        job_id=job.id,
+        execution_token=execution_token,
+        deleted_keys=object_keys,
+    )
+
+    assert decision.completed is True
+    assert decision.stale is False
+    async with database.session_factory() as verify:
+        events = list(
+            (
+                await verify.execute(
+                    select(UserEvent).where(
+                        UserEvent.user_id == owner.id,
+                    )
+                )
+            ).scalars()
+        )
+        tombstone = await verify.get(User, owner.id)
+
+    assert [event.event_name for event in events] == ["privacy.deletion.completed"]
+    assert events[0].properties["deletion_type"] == "ACCOUNT"
+    latency_ms = events[0].properties["latency_ms"]
+    assert isinstance(latency_ms, int)
+    assert latency_ms >= 0
+    assert events[0].request_id == f"job:{job.id}"
+    assert tombstone is not None
+    assert tombstone.status is UserStatus.DELETED
 
 
 async def _tables_with_rows(

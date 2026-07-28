@@ -7,7 +7,13 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
+from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.telemetry import current_trace_fields
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+)
 from app.modules.governance.deletion_repository import DeletionRepository
 from app.modules.governance.deletion_service import (
     CreatedDeletion,
@@ -122,6 +128,22 @@ async def request_account_deletion(
         )
     except DeletionServiceError as error:
         _raise_service_error(error)
+    settings: Settings = request.app.state.settings
+    await ServerEventRecorder(
+        session,
+        settings,
+        ServerEventContext(
+            request_id=str(getattr(request.state, "request_id", "unavailable")),
+            trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        ),
+    ).record(
+        subject_user_id=user.id,
+        event_name="privacy.deletion.requested",
+        entity_type="DeletionJob",
+        entity_id=created.deletion.id,
+        dedupe_key=str(created.deletion.id),
+        properties={"deletion_type": created.deletion.deletion_type.value},
+    )
     return _response(created.deletion, reused=created.reused)
 
 
@@ -144,6 +166,7 @@ async def get_account_deletion_status(
 )
 async def request_photo_deletion(
     asset_id: UUID,
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     idempotency_key: Annotated[
@@ -159,6 +182,22 @@ async def request_photo_deletion(
         )
     except DeletionServiceError as error:
         _raise_service_error(error)
+    settings: Settings = request.app.state.settings
+    await ServerEventRecorder(
+        session,
+        settings,
+        ServerEventContext(
+            request_id=str(getattr(request.state, "request_id", "unavailable")),
+            trace_id=current_trace_fields().get("trace_id", "unavailable"),
+        ),
+    ).record(
+        subject_user_id=user.id,
+        event_name="privacy.deletion.requested",
+        entity_type="DeletionJob",
+        entity_id=created.deletion.id,
+        dedupe_key=str(created.deletion.id),
+        properties={"deletion_type": created.deletion.deletion_type.value},
+    )
     return _response(created.deletion, reused=created.reused)
 
 

@@ -20,6 +20,28 @@ class ServerEventContext:
     app_channel: str = "server"
 
 
+def elapsed_milliseconds(
+    started_at: datetime | None,
+    ended_at: datetime | None = None,
+) -> int:
+    if started_at is None:
+        return 0
+    normalized_start = (
+        started_at.replace(tzinfo=UTC)
+        if started_at.tzinfo is None or started_at.utcoffset() is None
+        else started_at.astimezone(UTC)
+    )
+    normalized_end = ended_at or datetime.now(UTC)
+    if normalized_end.tzinfo is None or normalized_end.utcoffset() is None:
+        normalized_end = normalized_end.replace(tzinfo=UTC)
+    else:
+        normalized_end = normalized_end.astimezone(UTC)
+    return max(
+        0,
+        round((normalized_end - normalized_start).total_seconds() * 1_000),
+    )
+
+
 def build_server_event_values(
     *,
     settings: Settings,

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
+from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.ai.contracts import (
     ImageEditRequest,
@@ -28,6 +29,11 @@ from app.modules.assets.storage import (
     build_object_storage,
 )
 from app.modules.diagnosis.models import OptimizationStatus
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+    elapsed_milliseconds,
+)
 from app.modules.governance.quota import QuotaRepository
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
@@ -699,6 +705,29 @@ class OptimizationExecutor:
                 execution_token=execution_token,
             ):
                 return False
+            await ServerEventRecorder(
+                session,
+                self._settings,
+                ServerEventContext(
+                    request_id=f"job:{job_id}",
+                    trace_id=current_trace_fields().get("trace_id", "unavailable"),
+                    app_channel="worker",
+                ),
+            ).record(
+                subject_user_id=record.job.user_id,
+                event_name="optimization.result.completed",
+                entity_type="GenerationJob",
+                entity_id=record.job.id,
+                dedupe_key=str(record.job.id),
+                properties={
+                    "job_id": str(record.job.id),
+                    "critic_attempts": accepted_attempt,
+                    "latency_ms": elapsed_milliseconds(
+                        record.job.started_at or record.job.created_at,
+                        record.job.completed_at,
+                    ),
+                },
+            )
             await session.commit()
             return True
 

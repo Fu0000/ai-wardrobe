@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.ai.contracts import (
     ProviderErrorCode,
@@ -26,6 +27,11 @@ from app.modules.diagnosis.repository import (
     DiagnosisRepository,
 )
 from app.modules.diagnosis.schema import DiagnosisOutput, InputQuality
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+    elapsed_milliseconds,
+)
 from app.modules.governance.quota import QuotaRepository
 from app.modules.jobs.invocations import DatabaseInvocationObserver
 from app.modules.jobs.models import JobStatus
@@ -295,6 +301,28 @@ class DiagnosisExecutor:
                 execution_token=execution_token,
             ):
                 return False
+            await ServerEventRecorder(
+                session,
+                self._settings,
+                ServerEventContext(
+                    request_id=f"job:{job_id}",
+                    trace_id=current_trace_fields().get("trace_id", "unavailable"),
+                    app_channel="worker",
+                ),
+            ).record(
+                subject_user_id=context.job.user_id,
+                event_name="diagnosis.text.completed",
+                entity_type="GenerationJob",
+                entity_id=context.job.id,
+                dedupe_key=str(context.job.id),
+                properties={
+                    "job_id": str(context.job.id),
+                    "latency_ms": elapsed_milliseconds(
+                        context.job.started_at or context.job.created_at,
+                        context.job.completed_at,
+                    ),
+                },
+            )
             await session.commit()
             return True
 

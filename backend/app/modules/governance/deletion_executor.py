@@ -3,10 +3,16 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.core.config import Settings
+from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.assets.storage import (
     ObjectStorageUnavailableError,
     build_object_storage,
+)
+from app.modules.events.server import (
+    ServerEventContext,
+    ServerEventRecorder,
+    elapsed_milliseconds,
 )
 from app.modules.governance.deletion_repository import (
     AssetDeletionPlan,
@@ -282,6 +288,28 @@ class DeletionExecutor:
                 execution_token=execution_token,
             ):
                 return CompletionDecision(completed=False, stale=True)
+            await ServerEventRecorder(
+                session,
+                self._settings,
+                ServerEventContext(
+                    request_id=f"job:{job_id}",
+                    trace_id=current_trace_fields().get("trace_id", "unavailable"),
+                    app_channel="worker",
+                ),
+            ).record(
+                subject_user_id=context.user.id,
+                event_name="privacy.deletion.completed",
+                entity_type="DeletionJob",
+                entity_id=context.deletion.id,
+                dedupe_key=str(context.deletion.id),
+                properties={
+                    "deletion_type": context.deletion.deletion_type.value,
+                    "latency_ms": elapsed_milliseconds(
+                        context.deletion.created_at,
+                        context.job.completed_at,
+                    ),
+                },
+            )
             await session.commit()
             return CompletionDecision(completed=True, stale=False)
 
