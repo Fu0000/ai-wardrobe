@@ -501,7 +501,7 @@ API 创建业务记录与 OutboxEvent
   Python/小程序依赖漏洞执行强制门禁；全部第三方
   GitHub Actions 固定完整 Commit SHA，并由 Dependabot 周期更新。
 - W6 QA/治理证据：Bug 分级、34 项核心验收用例、三类微信真机矩阵、Release Gate、Go/No-Go 决策规则、发布观察和回滚清单已形成独立可签署文档。
-- W6 Recovery/Canary 代码证据：基于 libpq Service 的校验和逻辑备份、隔离空库单事务恢复、RPO/RTO/行数/关系不变量报告；AI 用户稳定分桶、创建时 Policy Snapshot、Worker 按快照执行、0/10/50/100% Staging 审批工作流和回滚阈值 Runbook。
+- W6 Recovery/Canary 代码证据：基于 libpq Service 的校验和逻辑备份、隔离空库单事务恢复、RPO/RTO/行数/关系不变量报告；本地 Docker PostgreSQL 18 演练已完成，恢复耗时 0.263 秒、备份年龄 0.563 秒、迁移版本与 6 类行数一致、4 类关系不变量为 0，但源库为空且不能替代 Staging 含数据恢复；AI 用户稳定分桶、创建时 Policy Snapshot、Worker 按快照执行、0/10/50/100% Staging 审批工作流和回滚阈值 Runbook。
 - W6 Performance 代码证据：k6 2.1 API 读流量阶梯、真实 AI 成本/授权数据双重确认、每授权 Asset 单次 Diagnosis 并发与终态轮询、成功率/P90/P95/5xx 阈值、停止条件和标准报告模板。
 - W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、
   Trace/页面/设备最小化上下文、幂等防重、版本化游标与用户隔离分页、诊断结果直达
