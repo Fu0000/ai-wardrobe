@@ -211,6 +211,13 @@ Optimization 正常样本和六类 Fidelity Bad Case、私有且不重复的资�
 Release Gate 模式重复执行同一合同，绕过 Bundle 入口也不能触发不合格数据的付费评测。
 校验失败仅落规则编号，不泄露样本、授权或对象引用。
 
+非零 Canary 还必须在同一不可变 Bundle 中提供两份正式 Review Manifest。机器准入会
+强制每个 Validation 样本至少两名匿名评审者、重复评审去重、明显个人信息拦截与分歧
+第三人仲裁；Diagnosis Review 绑定候选 Model/Prompt/Schema，并要求通过率 ≥95%、
+各维均分 ≥4.0；Optimization Review 绑定生产图片模型，并核对人工 PASS/REJECT 及
+Failure Dimension 与 Manifest 标签一致。Review 缺失或沿用旧候选版本时，Runner 在
+Provider 调用前以配置错误失败，不允许只凭自动指标放量。
+
 **影响**：`docs/13` 第 9.2 节 M1 Gate 的 `Diagnosis Success Rate ≥95%`、`P95 < 30s`、`Critic First-pass ≥75%` 四个数值**没有任何数据来源**，AI Quality Gate 无法脱离 `BLOCKED`。
 
 **方案**：

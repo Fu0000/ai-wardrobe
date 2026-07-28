@@ -16,6 +16,11 @@ FORBIDDEN_REFERENCE_MARKERS = (
     "test",
     "todo",
 )
+FORBIDDEN_REVIEW_CONTENT_PATTERNS = (
+    re.compile(r"(?:https?|cos-private)://", re.IGNORECASE),
+    re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),
+    re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"),
+)
 
 
 class DatasetPolicyError(ValueError):
@@ -56,7 +61,7 @@ def common_release_violations(
         violations.append(f"{domain}.sample_ids_unique")
     if len(set(dataset_versions)) != 1:
         violations.append(f"{domain}.single_dataset_version")
-    if any(not _valid_consent_reference(reference) for reference in consent_references):
+    if any(not opaque_reference_is_valid(reference) for reference in consent_references):
         violations.append(f"{domain}.authorization_references_valid")
     if any(len(tags) != len(set(tags)) for tags in tag_sets):
         violations.append(f"{domain}.tags_unique_per_sample")
@@ -87,8 +92,14 @@ def tag_value(tags: Sequence[str], prefix: str) -> str | None:
     return values[0]
 
 
-def _valid_consent_reference(reference: str) -> bool:
+def opaque_reference_is_valid(reference: str) -> bool:
     lowered = reference.lower()
     return bool(CONSENT_REFERENCE_PATTERN.fullmatch(reference)) and not any(
         marker in lowered for marker in FORBIDDEN_REFERENCE_MARKERS
+    )
+
+
+def review_notes_are_safe(notes: str | None) -> bool:
+    return notes is None or not any(
+        pattern.search(notes) for pattern in FORBIDDEN_REVIEW_CONTENT_PATTERNS
     )

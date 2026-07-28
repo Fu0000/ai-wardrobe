@@ -9,11 +9,15 @@ from pydantic import BaseModel
 from app.evaluation.dataset_policy import DatasetPolicyError
 from app.evaluation.diagnosis import (
     EvaluationSample,
+    HumanReview,
     validate_diagnosis_release_dataset,
+    validate_diagnosis_release_reviews,
 )
 from app.evaluation.optimization import (
     OptimizationEvaluationSample,
+    OptimizationHumanReview,
     validate_optimization_release_dataset,
+    validate_optimization_release_reviews,
 )
 from scripts.eval_bundle import (
     EXPECTED_FILES,
@@ -134,10 +138,82 @@ def release_optimization_manifest() -> bytes:
     return ("\n".join(records) + "\n").encode()
 
 
+def release_diagnosis_reviews() -> bytes:
+    records = [
+        json.dumps(
+            {
+                "sample_id": f"sd_release_{index:03d}",
+                "dataset_version": "v1.0",
+                "evaluator_version": "human-rubric-v1.0.0",
+                "model_version": "candidate-diagnosis-model",
+                "prompt_version": "style-diagnosis-2026-07-26.1",
+                "schema_version": "style-diagnosis-v1.0.0",
+                "reviewer_id": reviewer,
+                "scores": {
+                    "primary_issue_hit": 5,
+                    "strength_specificity": 5,
+                    "actionability": 5,
+                    "occasion_fit": 5,
+                    "minimal_change": 5,
+                    "respectful_expression": 5,
+                },
+                "hard_failure_codes": [],
+            },
+            separators=(",", ":"),
+        )
+        for index in range(50)
+        for reviewer in ("reviewer_a_000000", "reviewer_b_000000")
+    ]
+    return ("\n".join(records) + "\n").encode()
+
+
+def release_optimization_reviews() -> bytes:
+    bad_cases = [
+        ("IDENTITY", "identity_fidelity"),
+        ("IDENTITY", "body_fidelity"),
+        ("BACKGROUND_AND_LIGHTING", "background_lighting_fidelity"),
+        ("POSE_AND_COMPOSITION", "pose_composition_fidelity"),
+        ("UNMENTIONED_GARMENTS", "unmentioned_garment_fidelity"),
+        ("VISUAL_ARTIFACT", "artifact_quality"),
+    ]
+    records: list[str] = []
+    for index in range(50):
+        bad_case = bad_cases[index] if index < len(bad_cases) else None
+        for reviewer in ("reviewer_a_000000", "reviewer_b_000000"):
+            scores = {
+                "identity_fidelity": 5,
+                "body_fidelity": 5,
+                "pose_composition_fidelity": 5,
+                "background_lighting_fidelity": 5,
+                "unmentioned_garment_fidelity": 5,
+                "requested_change_quality": 5,
+                "artifact_quality": 5,
+            }
+            if bad_case:
+                scores[bad_case[1]] = 2
+            records.append(
+                json.dumps(
+                    {
+                        "sample_id": f"of_release_{index:03d}",
+                        "dataset_version": "v1.0",
+                        "evaluator_version": "optimization-human-rubric-v1.0.0",
+                        "production_image_model": "gpt-image-candidate",
+                        "reviewer_id": reviewer,
+                        "scores": scores,
+                        "hard_failure_codes": [bad_case[0]] if bad_case else [],
+                    },
+                    separators=(",", ":"),
+                )
+            )
+    return ("\n".join(records) + "\n").encode()
+
+
 def release_files() -> dict[str, bytes]:
     files = valid_files()
     files["diagnosis/manifest.jsonl"] = release_diagnosis_manifest()
+    files["diagnosis/reviews.jsonl"] = release_diagnosis_reviews()
     files["optimization/manifest.jsonl"] = release_optimization_manifest()
+    files["optimization/reviews.jsonl"] = release_optimization_reviews()
     return files
 
 
@@ -248,6 +324,47 @@ def test_optimization_policy_rejects_missing_production_evidence() -> None:
         validate_optimization_release_dataset(samples)
 
     assert captured.value.violations == ("optimization.production_metrics_complete",)
+
+
+def test_diagnosis_review_policy_requires_candidate_binding_and_full_coverage() -> None:
+    samples = parse_records(release_diagnosis_manifest(), EvaluationSample)
+    reviews = parse_records(release_diagnosis_reviews(), HumanReview)
+    reviews = reviews[:-1]
+
+    with pytest.raises(DatasetPolicyError) as captured:
+        validate_diagnosis_release_reviews(
+            samples,
+            reviews,
+            expected_model="different-model",
+        )
+
+    assert {
+        "diagnosis.review_model_binding_valid",
+        "diagnosis.two_reviews_per_sample",
+    }.issubset(captured.value.violations)
+
+
+def test_optimization_review_policy_rejects_sensitive_notes_and_label_drift() -> None:
+    samples = parse_records(
+        release_optimization_manifest(),
+        OptimizationEvaluationSample,
+    )
+    reviews = parse_records(release_optimization_reviews(), OptimizationHumanReview)
+    first = reviews[0]
+    reviews[0] = first.model_copy(
+        update={
+            "hard_failure_codes": [],
+            "notes": "contact reviewer@example.com",
+        }
+    )
+
+    with pytest.raises(DatasetPolicyError) as captured:
+        validate_optimization_release_reviews(samples, reviews)
+
+    assert {
+        "optimization.review_notes_deidentified",
+        "optimization.human_labels_match_expected_gate",
+    }.issubset(captured.value.violations)
 
 
 @pytest.mark.parametrize(

@@ -170,7 +170,7 @@ HTTP 失败率 <2%、P90 <20 秒、P95 <30 秒，且不得记录任何身份或�
 | Build | Lint、Type Check、Unit/Contract、微信构建、Migration 检查通过 | PASS（本地证据，需候选 SHA 重跑） |
 | Supply Chain | Python 无已知漏洞；小程序无未批准 High/Critical；例外有 Owner 和到期日 | PASS（8 个 High 已修复；1 个 Windows Vite 开发服务器例外登记至 2026-08-09） |
 | Security/Privacy | 双账号隔离、私有 URL、删除闭包和日志脱敏通过 | BLOCKED：42 个实库用例已覆盖 API 双账号隔离、关联污染和删除闭包；真实 COS Signed URL 过期/权限、对象删除与授权 Prompt Injection Eval 未验收 |
-| AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：Bundle/Runner 已在 Provider 调用前强制样本量、场景、多样性、低质/注入、Fidelity Bad Case、授权与私有引用准入；仍缺真实授权数据、基线与真实 Provider 证据 |
+| AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：Bundle/Runner 已在 Provider 调用前强制样本分布、授权/私有引用，以及全 Validation 双人盲评、版本绑定、分歧仲裁和人工标签一致性；仍缺真实授权数据、评审记录、基线与真实 Provider 证据 |
 | Staging E2E | 微信登录、COS、全部 Worker、分享投票和冒烟通过 | BLOCKED：缺 Staging 与凭据 |
 | Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复演练通过；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
 | Performance | 核心容量、P95、队列积压和低端安卓达标 | IN_PROGRESS：本地 5→20 req/s API 基线为 100% 成功、0% HTTP 失败、P95 14.99 ms；Staging AI/COS、队列恢复、资源水位与低端安卓未验收 |

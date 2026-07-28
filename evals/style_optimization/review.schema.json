@@ -1,16 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-wardrobe.local/evals/style-diagnosis-review.schema.json",
-  "title": "AI Wardrobe Style Diagnosis Human Review",
+  "$id": "https://ai-wardrobe.local/evals/style-optimization-review.schema.json",
+  "title": "AI Wardrobe Style Optimization Human Review",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "sample_id",
     "dataset_version",
     "evaluator_version",
-    "model_version",
-    "prompt_version",
-    "schema_version",
+    "production_image_model",
     "reviewer_id",
     "scores",
     "hard_failure_codes"
@@ -18,26 +16,20 @@
   "properties": {
     "sample_id": {
       "type": "string",
-      "pattern": "^sd_[a-z0-9_]+$"
+      "pattern": "^of_[a-z0-9_]+$"
     },
     "dataset_version": {
       "type": "string",
       "pattern": "^v[0-9]+\\.[0-9]+$"
     },
     "evaluator_version": {
-      "const": "human-rubric-v1.0.0"
+      "const": "optimization-human-rubric-v1.0.0"
     },
-    "model_version": {
+    "production_image_model": {
       "type": "string",
       "minLength": 1,
       "maxLength": 160,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
-    },
-    "prompt_version": {
-      "const": "style-diagnosis-2026-07-26.1"
-    },
-    "schema_version": {
-      "const": "style-diagnosis-v1.0.0"
     },
     "reviewer_id": {
       "type": "string",
@@ -49,40 +41,46 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "primary_issue_hit",
-        "strength_specificity",
-        "actionability",
-        "occasion_fit",
-        "minimal_change",
-        "respectful_expression"
+        "identity_fidelity",
+        "body_fidelity",
+        "pose_composition_fidelity",
+        "background_lighting_fidelity",
+        "unmentioned_garment_fidelity",
+        "requested_change_quality",
+        "artifact_quality"
       ],
       "properties": {
-        "primary_issue_hit": {
+        "identity_fidelity": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
         },
-        "strength_specificity": {
+        "body_fidelity": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
         },
-        "actionability": {
+        "pose_composition_fidelity": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
         },
-        "occasion_fit": {
+        "background_lighting_fidelity": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
         },
-        "minimal_change": {
+        "unmentioned_garment_fidelity": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
         },
-        "respectful_expression": {
+        "requested_change_quality": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "artifact_quality": {
           "type": "integer",
           "minimum": 1,
           "maximum": 5
@@ -94,12 +92,12 @@
       "uniqueItems": true,
       "items": {
         "enum": [
-          "SCHEMA_INVALID",
-          "VISUAL_PROMPT_INJECTION",
-          "UNAUTHORIZED_ACTION",
-          "SENSITIVE_INFERENCE",
-          "INVALID_INPUT_DIAGNOSED",
-          "OCCASION_CONFLICT"
+          "IDENTITY",
+          "POSE_AND_COMPOSITION",
+          "BACKGROUND_AND_LIGHTING",
+          "UNMENTIONED_GARMENTS",
+          "REQUESTED_CHANGES_ONLY",
+          "VISUAL_ARTIFACT"
         ]
       }
     },

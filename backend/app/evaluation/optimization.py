@@ -15,8 +15,10 @@ from app.core.config import Settings
 from app.evaluation.dataset_policy import (
     DatasetPolicyError,
     common_release_violations,
+    opaque_reference_is_valid,
     private_object_key,
     private_reference_violations,
+    review_notes_are_safe,
 )
 from app.evaluation.diagnosis import read_jsonl
 from app.evaluation.regression import (
@@ -43,6 +45,7 @@ from app.modules.optimization.schema import (
 )
 
 EVALUATOR_VERSION = "style-optimization-evaluator-v1.0.0"
+HUMAN_RUBRIC_VERSION = "optimization-human-rubric-v1.0.0"
 REQUIRED_OPTIMIZATION_BAD_CASES = {
     "bad_case:identity_change": "IDENTITY",
     "bad_case:body_change": "IDENTITY",
@@ -123,10 +126,21 @@ class OptimizationHumanReview(BaseModel):
     sample_id: str = Field(pattern=r"^of_[a-z0-9_]+$")
     dataset_version: str
     evaluator_version: str
+    production_image_model: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
     reviewer_id: str = Field(min_length=3, max_length=80)
     scores: OptimizationReviewScores
     hard_failure_codes: list[FailureDimension] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_hard_failure_codes(self) -> OptimizationHumanReview:
+        if len(self.hard_failure_codes) != len(set(self.hard_failure_codes)):
+            raise ValueError("hard failure codes must be unique")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +451,89 @@ def aggregate_reviews(
     }
 
 
+def validate_optimization_release_reviews(
+    samples: list[OptimizationEvaluationSample],
+    reviews: list[OptimizationHumanReview],
+    *,
+    release_split: str = "validation",
+) -> dict[str, object]:
+    selected = {sample.sample_id: sample for sample in samples if sample.split == release_split}
+    reviews_by_sample: dict[str, list[OptimizationHumanReview]] = defaultdict(list)
+    for review in reviews:
+        reviews_by_sample[review.sample_id].append(review)
+
+    violations: list[str] = []
+    if set(reviews_by_sample) != set(selected):
+        violations.append("optimization.review_sample_coverage_complete")
+    if len({(review.sample_id, review.reviewer_id) for review in reviews}) != len(reviews):
+        violations.append("optimization.review_pairs_unique")
+    if len({review.reviewer_id for review in reviews}) < 2:
+        violations.append("optimization.reviewers_at_least_2")
+    if any(not opaque_reference_is_valid(review.reviewer_id) for review in reviews):
+        violations.append("optimization.reviewer_ids_pseudonymous")
+    if any(not review_notes_are_safe(review.notes) for review in reviews):
+        violations.append("optimization.review_notes_deidentified")
+    if any(
+        review.sample_id not in selected
+        or review.dataset_version != selected[review.sample_id].dataset_version
+        or review.production_image_model != selected[review.sample_id].production_image_model
+        for review in reviews
+    ):
+        violations.append("optimization.review_dataset_model_binding_valid")
+    if any(review.evaluator_version != HUMAN_RUBRIC_VERSION for review in reviews):
+        violations.append("optimization.review_rubric_current")
+
+    if any(
+        len({review.reviewer_id for review in reviews_by_sample[sample_id]}) < 2
+        for sample_id in selected
+    ):
+        violations.append("optimization.two_reviews_per_sample")
+
+    for sample_id, sample_reviews in reviews_by_sample.items():
+        if sample_id not in selected:
+            continue
+        disagrees = any(
+            max(getattr(review.scores, dimension) for review in sample_reviews)
+            - min(getattr(review.scores, dimension) for review in sample_reviews)
+            >= 2
+            for dimension in OptimizationReviewScores.model_fields
+        )
+        if disagrees and len({review.reviewer_id for review in sample_reviews}) < 3:
+            violations.append("optimization.review_disagreements_arbitrated")
+            break
+
+    for sample_id, sample in selected.items():
+        sample_reviews = reviews_by_sample[sample_id]
+        if sample.expected.decision == "PASS":
+            if any(not review_passes(review) for review in sample_reviews):
+                violations.append("optimization.human_labels_match_expected_gate")
+                break
+            continue
+        reviewed_failures = {
+            code for review in sample_reviews for code in review.hard_failure_codes
+        }
+        if (
+            not sample_reviews
+            or any(not review.hard_failure_codes for review in sample_reviews)
+            or not set(sample.expected.failure_dimensions).issubset(reviewed_failures)
+        ):
+            violations.append("optimization.human_labels_match_expected_gate")
+            break
+
+    summary = aggregate_reviews(reviews)
+    if not summary["coverage_gate_20_per_dimension"]:
+        violations.append("optimization.review_dimension_coverage_at_least_20")
+
+    if violations:
+        raise DatasetPolicyError(violations)
+    return {
+        "status": "PASSED",
+        "sample_count": len(selected),
+        "review_count": len(reviews),
+        "reviewer_count": len({review.reviewer_id for review in reviews}),
+    }
+
+
 class OptimizationEvaluationRunner:
     def __init__(self, *, settings: Settings, storage: ObjectStorage) -> None:
         if not settings.openai_enabled:
@@ -692,6 +789,24 @@ def main() -> int:
     reviews = (
         read_jsonl(args.reviews, OptimizationHumanReview) if args.reviews is not None else None
     )
+    if args.enforce_release_gates:
+        try:
+            if reviews is None:
+                raise DatasetPolicyError(["optimization.review_manifest_required"])
+            validate_optimization_release_reviews(samples, reviews)
+        except DatasetPolicyError as error:
+            write_report(
+                args.output,
+                {
+                    "schema_version": 1,
+                    "command_gate": {
+                        "status": "FAILED",
+                        "failures": ["RELEASE_HUMAN_REVIEW_POLICY_FAILED"],
+                        "policy_violations": list(error.violations),
+                    },
+                },
+            )
+            return 2
     results = asyncio.run(
         run_evaluation(
             samples,

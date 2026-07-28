@@ -23,6 +23,7 @@ evals/
 │   └── rubric.md
 └── style_optimization/
     ├── manifest.example.jsonl
+    ├── review.schema.json
     ├── review.example.jsonl
     └── rubric.md
 ```
@@ -64,6 +65,24 @@ AI Canary 的 Bundle 必须同时满足：
 
 CI 在安全解压后、调用 Provider 前执行相同合同；两个 Runner 在
 `--enforce-release-gates` 下会再次校验，不能通过绕过 ZIP 入口规避准入。
+
+正式 Bundle 固定包含以下 6 个文件，缺失或多出任一文件均拒绝：
+
+```text
+diagnosis/baseline.json
+diagnosis/manifest.jsonl
+diagnosis/reviews.jsonl
+optimization/baseline.json
+optimization/manifest.jsonl
+optimization/reviews.jsonl
+```
+
+两份 Review Manifest 必须覆盖每个正式 Validation 样本且每条至少两名不同的匿名
+评审者；评审 `(sample_id, reviewer_id)` 不得重复。Diagnosis Review 绑定候选
+Model/Prompt/Schema，六维均分不低于 4.0、通过率不低于 95%；Optimization Review
+绑定生产图片模型，PASS/REJECT 人工标签必须与 Manifest 一致。两分以上分歧必须有
+第三名评审者完成仲裁。评审备注会拒绝 URL、对象引用、邮箱和中国大陆手机号等明显
+个人信息。
 
 可在受控环境预检不可变 Bundle：
 

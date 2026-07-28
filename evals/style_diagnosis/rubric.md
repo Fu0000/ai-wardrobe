@@ -4,6 +4,8 @@
 
 评审前先完成 5 个非正式校准样本；校准结果不计入 Release Gate。评审者只使用匿名
 `sample_id`，不得在记录中写入姓名、联系方式、图片 URL 或可识别身份的信息。
+正式记录必须绑定本次候选的 `model_version`、`prompt_version`、`schema_version` 和
+固定 `human-rubric-v1.0.0`，旧模型或旧 Prompt 的评审不得复用于本次 Release Gate。
 
 ## 评分维度
 
@@ -58,3 +60,5 @@
 - 任一维度分差 ≥2 的样本进入仲裁，不直接取平均分。
 - 仲裁必须新增一条带独立 `reviewer_id` 的记录，原始评分不得覆盖。
 - 报告由 Eval Runner 汇总覆盖缺口、硬性失败、通过率和待仲裁样本。
+- Release Gate 要求每个正式 Validation 样本都有两名不同评审者，六维均分不低于
+  4.0、评审通过率不低于 95%，存在两分以上分歧时必须有第三名独立仲裁者。

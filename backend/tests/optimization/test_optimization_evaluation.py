@@ -191,6 +191,7 @@ def test_human_review_requires_two_independent_reviewers() -> None:
             "sample_id": "of_background_001",
             "dataset_version": "v0.1",
             "evaluator_version": "human-v1",
+            "production_image_model": "gpt-image-stable",
             "reviewer_id": "reviewer-a",
             "scores": {
                 "identity_fidelity": 5,

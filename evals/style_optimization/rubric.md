@@ -5,6 +5,8 @@
 
 只允许使用具备研发评测授权的照片。Manifest 仅保存 `cos-private://` 私有对象引用和
 不可反查个人身份的 `consent_reference`；评审记录不得写入姓名、联系方式或签名 URL。
+正式评审必须绑定 Manifest 中的 `production_image_model` 和固定
+`optimization-human-rubric-v1.0.0`；不得将其他图片模型版本的评审复用于本次门禁。
 
 ## 评分维度
 
@@ -58,3 +60,7 @@
 
 Release Gate：Critic First-pass ≥75%，生产 P90 <60 秒，成本覆盖率 100%，且
 Critic 拒绝的结果向用户暴露数量必须为 0。
+
+人工证据 Gate：每个正式 Validation 样本至少有两名不同评审者；PASS 样本的两份记录
+均满足通过标准，REJECT 样本的人工硬失败合集必须覆盖 Manifest 的
+`failure_dimensions`；两分以上分歧必须有第三名独立仲裁者。

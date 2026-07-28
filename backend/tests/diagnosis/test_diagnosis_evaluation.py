@@ -133,6 +133,9 @@ def test_human_review_summary_flags_under_reviewed_samples() -> None:
             "sample_id": "sd_commute_001",
             "dataset_version": "v0.1",
             "evaluator_version": "human-v1",
+            "model_version": "gpt-5.6-terra",
+            "prompt_version": "style-diagnosis-2026-07-26.1",
+            "schema_version": "style-diagnosis-v1.0.0",
             "reviewer_id": "reviewer-a",
             "scores": {
                 "primary_issue_hit": 5,

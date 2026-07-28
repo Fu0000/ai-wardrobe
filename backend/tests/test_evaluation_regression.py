@@ -258,6 +258,54 @@ def test_cli_refuses_to_overwrite_its_baseline(
     assert baseline_path.read_bytes() == original
 
 
+@pytest.mark.parametrize(
+    ("module", "dataset_validator"),
+    [
+        (diagnosis, "validate_diagnosis_release_dataset"),
+        (optimization, "validate_optimization_release_dataset"),
+    ],
+)
+def test_release_cli_requires_human_reviews_before_provider_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    module: ModuleType,
+    dataset_validator: str,
+) -> None:
+    output_path = tmp_path / f"{module.__name__}.json"
+    monkeypatch.setattr(
+        module,
+        "parse_args",
+        lambda: argparse.Namespace(
+            manifest=tmp_path / "manifest.jsonl",
+            output=output_path,
+            reviews=None,
+            split=None,
+            max_samples=None,
+            concurrency=2,
+            baseline=None,
+            max_quality_drop=0.03,
+            max_latency_increase_percent=20.0,
+            max_cost_increase_percent=20.0,
+            expected_model="candidate-model",
+            expected_critic_model="candidate-model",
+            expected_production_model=None,
+            enforce_release_gates=True,
+        ),
+    )
+    monkeypatch.setattr(module, "read_jsonl", lambda *_args: [object()])
+    monkeypatch.setattr(module, dataset_validator, lambda _samples: {})
+    monkeypatch.setattr(
+        module,
+        "Settings",
+        lambda: (_ for _ in ()).throw(AssertionError("provider setup must not run")),
+    )
+
+    assert module.main() == 2
+    report, _ = load_report(output_path)
+    gate = cast(dict[str, object], report["command_gate"])
+    assert gate["failures"] == ["RELEASE_HUMAN_REVIEW_POLICY_FAILED"]
+
+
 def test_cli_writes_failure_report_then_returns_nonzero_for_regression(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

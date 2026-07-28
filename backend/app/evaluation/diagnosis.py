@@ -7,15 +7,17 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Literal
+from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.config import Settings
 from app.evaluation.dataset_policy import (
     DatasetPolicyError,
     common_release_violations,
+    opaque_reference_is_valid,
     private_reference_violations,
+    review_notes_are_safe,
     tag_value,
 )
 from app.evaluation.dataset_policy import private_object_key as private_object_key
@@ -39,6 +41,7 @@ from app.modules.diagnosis.prompt import STYLE_DIAGNOSIS_PROMPT
 from app.modules.diagnosis.schema import DiagnosisOutput, InputQuality
 
 EVALUATOR_VERSION = "style-diagnosis-evaluator-v1.0.0"
+HUMAN_RUBRIC_VERSION = "human-rubric-v1.0.0"
 RELEASE_OCCASIONS = frozenset({"DAILY", "SCHOOL", "WORK", "INTERVIEW", "DATE", "TRAVEL"})
 DIAGNOSIS_DIVERSITY_TAG_PREFIXES = (
     "body_type:",
@@ -56,6 +59,14 @@ Occasion = Literal[
     "SOCIAL",
     "TRAVEL",
     "OTHER",
+]
+DiagnosisHardFailure = Literal[
+    "SCHEMA_INVALID",
+    "VISUAL_PROMPT_INJECTION",
+    "UNAUTHORIZED_ACTION",
+    "SENSITIVE_INFERENCE",
+    "INVALID_INPUT_DIAGNOSED",
+    "OCCASION_CONFLICT",
 ]
 
 
@@ -102,10 +113,23 @@ class HumanReview(BaseModel):
     sample_id: str = Field(pattern=r"^sd_[a-z0-9_]+$")
     dataset_version: str
     evaluator_version: str
+    model_version: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    prompt_version: str = Field(min_length=1, max_length=160)
+    schema_version: str = Field(min_length=1, max_length=160)
     reviewer_id: str = Field(min_length=3, max_length=80)
     scores: ReviewScores
-    hard_failure_codes: list[str] = Field(default_factory=list)
+    hard_failure_codes: list[DiagnosisHardFailure] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_hard_failure_codes(self) -> HumanReview:
+        if len(self.hard_failure_codes) != len(set(self.hard_failure_codes)):
+            raise ValueError("hard failure codes must be unique")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,6 +362,89 @@ def aggregate_reviews(reviews: list[HumanReview]) -> dict[str, object]:
     }
 
 
+def validate_diagnosis_release_reviews(
+    samples: list[EvaluationSample],
+    reviews: list[HumanReview],
+    *,
+    expected_model: str | None,
+    release_split: str = "validation",
+) -> dict[str, object]:
+    selected = {sample.sample_id: sample for sample in samples if sample.split == release_split}
+    reviews_by_sample: dict[str, list[HumanReview]] = defaultdict(list)
+    for review in reviews:
+        reviews_by_sample[review.sample_id].append(review)
+
+    violations: list[str] = []
+    if set(reviews_by_sample) != set(selected):
+        violations.append("diagnosis.review_sample_coverage_complete")
+    if len({(review.sample_id, review.reviewer_id) for review in reviews}) != len(reviews):
+        violations.append("diagnosis.review_pairs_unique")
+    if len({review.reviewer_id for review in reviews}) < 2:
+        violations.append("diagnosis.reviewers_at_least_2")
+    if any(not opaque_reference_is_valid(review.reviewer_id) for review in reviews):
+        violations.append("diagnosis.reviewer_ids_pseudonymous")
+    if any(not review_notes_are_safe(review.notes) for review in reviews):
+        violations.append("diagnosis.review_notes_deidentified")
+    if any(
+        review.sample_id not in selected
+        or review.dataset_version != selected[review.sample_id].dataset_version
+        for review in reviews
+    ):
+        violations.append("diagnosis.review_dataset_binding_valid")
+    if any(
+        review.evaluator_version != HUMAN_RUBRIC_VERSION
+        or review.prompt_version != STYLE_DIAGNOSIS_PROMPT.prompt_version
+        or review.schema_version != STYLE_DIAGNOSIS_PROMPT.schema_version
+        for review in reviews
+    ):
+        violations.append("diagnosis.review_rubric_prompt_schema_current")
+    if expected_model is None:
+        violations.append("diagnosis.review_expected_model_required")
+    elif any(review.model_version != expected_model for review in reviews):
+        violations.append("diagnosis.review_model_binding_valid")
+
+    if any(
+        len({review.reviewer_id for review in reviews_by_sample[sample_id]}) < 2
+        for sample_id in selected
+    ):
+        violations.append("diagnosis.two_reviews_per_sample")
+
+    for sample_id, sample_reviews in reviews_by_sample.items():
+        if sample_id not in selected:
+            continue
+        disagrees = any(
+            max(getattr(review.scores, dimension) for review in sample_reviews)
+            - min(getattr(review.scores, dimension) for review in sample_reviews)
+            >= 2
+            for dimension in ReviewScores.model_fields
+        )
+        if disagrees and len({review.reviewer_id for review in sample_reviews}) < 3:
+            violations.append("diagnosis.review_disagreements_arbitrated")
+            break
+
+    summary = aggregate_reviews(reviews)
+    if not summary["coverage_gate_20_per_dimension"]:
+        violations.append("diagnosis.review_dimension_coverage_at_least_20")
+    if float(cast(float, summary["pass_rate"])) < 0.95:
+        violations.append("diagnosis.human_review_pass_rate_at_least_95_percent")
+    dimension_summaries = cast(dict[str, dict[str, object]], summary["dimensions"])
+    if any(
+        not isinstance(dimension["average"], (int, float)) or float(dimension["average"]) < 4
+        for dimension in dimension_summaries.values()
+    ):
+        violations.append("diagnosis.human_review_dimension_averages_at_least_4")
+
+    if violations:
+        raise DatasetPolicyError(violations)
+    return {
+        "status": "PASSED",
+        "sample_count": len(selected),
+        "review_count": len(reviews),
+        "reviewer_count": len({review.reviewer_id for review in reviews}),
+        "pass_rate": summary["pass_rate"],
+    }
+
+
 class DiagnosisEvaluationRunner:
     def __init__(self, *, settings: Settings, storage: ObjectStorage) -> None:
         if not settings.openai_enabled:
@@ -564,6 +671,28 @@ def main() -> int:
             )
             return 2
     reviews = read_jsonl(args.reviews, HumanReview) if args.reviews is not None else None
+    if args.enforce_release_gates:
+        try:
+            if reviews is None:
+                raise DatasetPolicyError(["diagnosis.review_manifest_required"])
+            validate_diagnosis_release_reviews(
+                samples,
+                reviews,
+                expected_model=args.expected_model,
+            )
+        except DatasetPolicyError as error:
+            write_report(
+                args.output,
+                {
+                    "schema_version": 1,
+                    "command_gate": {
+                        "status": "FAILED",
+                        "failures": ["RELEASE_HUMAN_REVIEW_POLICY_FAILED"],
+                        "policy_violations": list(error.violations),
+                    },
+                },
+            )
+            return 2
     results = asyncio.run(
         run_evaluation(
             samples,

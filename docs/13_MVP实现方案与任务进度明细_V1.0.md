@@ -477,6 +477,9 @@ API 创建业务记录与 OutboxEvent
   Eval Bundle 与两个 Runner 还会在 Provider 调用前校验 50+ 样本、六场景、多样性
   元数据、低质/Prompt Injection、六类 Optimization Bad Case、私有资产和有效授权
   引用；失败只记录规则编号并原子拒绝，不产生 AI 调用费用。
+  非零 Canary 同时强制两个 Review Manifest 覆盖全部 Validation 样本的双人盲评、
+  分歧仲裁、匿名评审者和模型版本绑定；Diagnosis 人工通过率/维度均分与 Optimization
+  人工标签一致性不达标时，同样在 Provider 调用前失败关闭。
   50+ 授权样本、真实基线归档、受保护环境密钥与首次 Staging 运行仍待验收。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric；Optimization Executor 已按生成尝试、Critic 评审和结果持久化拆分，非预期编程异常不再降级成普通瞬时故障。
 - 小程序架构代码证据：六个后台任务页面已统一到 `useJobPolling` 生命周期与竞态隔离；

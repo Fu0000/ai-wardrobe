@@ -168,6 +168,7 @@ jobs:
           fi
           uv run --no-sync python -m app.evaluation.diagnosis \
             --manifest "$RUNNER_TEMP/private-evals/diagnosis/manifest.jsonl" \
+            --reviews "$RUNNER_TEMP/private-evals/diagnosis/reviews.jsonl" \
             --baseline "$RUNNER_TEMP/private-evals/diagnosis/baseline.json" \
             --split validation \
             --concurrency 2 \
@@ -219,6 +220,7 @@ jobs:
           fi
           uv run --no-sync python -m app.evaluation.optimization \
             --manifest "$RUNNER_TEMP/private-evals/optimization/manifest.jsonl" \
+            --reviews "$RUNNER_TEMP/private-evals/optimization/reviews.jsonl" \
             --baseline "$RUNNER_TEMP/private-evals/optimization/baseline.json" \
             --split validation \
             --concurrency 2 \

@@ -11,20 +11,26 @@ from zipfile import BadZipFile, ZipFile, ZipInfo
 from app.evaluation.dataset_policy import DatasetPolicyError
 from app.evaluation.diagnosis import (
     EvaluationSample,
+    HumanReview,
     read_jsonl,
     validate_diagnosis_release_dataset,
+    validate_diagnosis_release_reviews,
 )
 from app.evaluation.optimization import (
     OptimizationEvaluationSample,
+    OptimizationHumanReview,
     validate_optimization_release_dataset,
+    validate_optimization_release_reviews,
 )
 
 EXPECTED_FILES = frozenset(
     {
         "diagnosis/baseline.json",
         "diagnosis/manifest.jsonl",
+        "diagnosis/reviews.jsonl",
         "optimization/baseline.json",
         "optimization/manifest.jsonl",
+        "optimization/reviews.jsonl",
     }
 )
 MAX_ARCHIVE_BYTES = 10 * 1024 * 1024
@@ -78,8 +84,25 @@ def _validate_release_policy(extracted: Path) -> None:
             extracted / "optimization/manifest.jsonl",
             OptimizationEvaluationSample,
         )
+        diagnosis_reviews = read_jsonl(
+            extracted / "diagnosis/reviews.jsonl",
+            HumanReview,
+        )
+        optimization_reviews = read_jsonl(
+            extracted / "optimization/reviews.jsonl",
+            OptimizationHumanReview,
+        )
         validate_diagnosis_release_dataset(diagnosis_samples)
         validate_optimization_release_dataset(optimization_samples)
+        validate_diagnosis_release_reviews(
+            diagnosis_samples,
+            diagnosis_reviews,
+            expected_model=(diagnosis_reviews[0].model_version if diagnosis_reviews else None),
+        )
+        validate_optimization_release_reviews(
+            optimization_samples,
+            optimization_reviews,
+        )
     except (DatasetPolicyError, OSError, ValueError) as error:
         raise EvalBundleError("eval bundle release dataset policy failed") from error
 
