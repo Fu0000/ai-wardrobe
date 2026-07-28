@@ -12,12 +12,21 @@ function integerEnv(name, fallback, minimum, maximum) {
   return value;
 }
 
+function durationEnv(name, fallback) {
+  const value = __ENV[name] || fallback;
+  if (!/^[1-9][0-9]*(ms|s|m)$/.test(value)) {
+    throw new Error(`${name} must be a positive k6 duration`);
+  }
+  return value;
+}
+
 function baseUrl() {
   const value = (__ENV.K6_BASE_URL || "").replace(/\/+$/, "");
   if (
-    value.startsWith("https://") ||
-    value.startsWith("http://localhost") ||
-    value.startsWith("http://127.0.0.1")
+    /^https:\/\/[^/\s]+(?:\/.*)?$/.test(value) ||
+    /^http:\/\/(localhost|127\.0\.0\.1|host\.docker\.internal)(:[1-9][0-9]{0,4})?(\/.*)?$/.test(
+      value,
+    )
   ) {
     return value;
   }
@@ -33,6 +42,11 @@ if (!token) {
 const startRate = integerEnv("K6_START_RATE", 5, 1, 200);
 const targetRate = integerEnv("K6_TARGET_RATE", 20, startRate, 500);
 const preAllocatedVUs = integerEnv("K6_PREALLOCATED_VUS", 20, 1, 500);
+const p95GateMs = integerEnv("K6_P95_GATE_MS", 500, 10, 10000);
+const p99GateMs = integerEnv("K6_P99_GATE_MS", 1000, p95GateMs, 20000);
+const rampDuration = durationEnv("K6_RAMP_DURATION", "1m");
+const steadyDuration = durationEnv("K6_STEADY_DURATION", "3m");
+const rampDownDuration = durationEnv("K6_RAMP_DOWN_DURATION", "30s");
 
 export const options = {
   discardResponseBodies: true,
@@ -44,9 +58,9 @@ export const options = {
       preAllocatedVUs,
       maxVUs: Math.min(1000, preAllocatedVUs * 4),
       stages: [
-        { target: targetRate, duration: "1m" },
-        { target: targetRate, duration: "3m" },
-        { target: 0, duration: "30s" },
+        { target: targetRate, duration: rampDuration },
+        { target: targetRate, duration: steadyDuration },
+        { target: 0, duration: rampDownDuration },
       ],
       gracefulStop: "30s",
     },
@@ -54,7 +68,10 @@ export const options = {
   thresholds: {
     business_success: ["rate>0.99"],
     "http_req_failed{scenario:api_reads}": ["rate<0.01"],
-    "http_req_duration{scenario:api_reads}": ["p(95)<1000", "p(99)<2000"],
+    "http_req_duration{scenario:api_reads}": [
+      `p(95)<${p95GateMs}`,
+      `p(99)<${p99GateMs}`,
+    ],
   },
 };
 
@@ -70,7 +87,7 @@ export function setup() {
   const readiness = http.get(`${target}/health/ready`, {
     tags: { operation: "readiness" },
   });
-  const profile = http.get(`${target}/api/v1/me/profile`, authenticatedParams);
+  const profile = http.get(`${target}/api/v1/me`, authenticatedParams);
   const valid = check(readiness, {
     "readiness is 200": (response) => response.status === 200,
   }) && check(profile, {
@@ -80,7 +97,7 @@ export function setup() {
     throw new Error("preflight failed");
   }
 
-  const paths = ["/api/v1/me/profile"];
+  const paths = ["/api/v1/me"];
   if (__ENV.K6_DIAGNOSIS_ID) {
     paths.push(`/api/v1/style-diagnoses/${__ENV.K6_DIAGNOSIS_ID}`);
   }
@@ -98,7 +115,7 @@ export default function (data) {
   const response = http.get(`${target}${path}`, authenticatedParams);
   const succeeded = check(response, {
     "authenticated read succeeds": (result) => result.status === 200,
-    "trace ID is present": (result) => Boolean(result.headers["X-Trace-Id"]),
+    "request ID is present": (result) => Boolean(result.headers["X-Request-Id"]),
   });
   businessSuccess.add(succeeded);
 }

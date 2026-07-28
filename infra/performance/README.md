@@ -1,10 +1,25 @@
 # MVP performance and capacity tests
 
-Use k6 `v2.1.0`. Run only against Staging during an approved test window, with Dashboard and On-call active. Never run load against production or use unconsented user photos.
+Use k6 `v2.1.0`. Remote load is restricted to Staging during an approved test
+window with Dashboard and On-call active; the automated baseline is restricted to
+the local environment. Never run load against production or use unconsented photos.
 
 ## API read capacity
 
-This suite ramps authenticated read traffic from 5 to 20 requests/second by default and enforces error rate <1%, P95 <1 second and P99 <2 seconds.
+This suite ramps authenticated read traffic from 5 to 20 requests/second by default and enforces error rate <1%, P95 <500 ms and P99 <1 second.
+
+Run the reproducible local baseline after local PostgreSQL/Redis, migrations and the API are ready:
+
+```bash
+make local-api-baseline
+```
+
+The runner uses the immutable `grafana/k6:2.1.0` image digest, creates an isolated
+short-lived performance user, removes it on exit, and writes a sanitized JSON summary
+and Markdown report under the gitignored `infra/performance/results/`. It refuses
+non-local APIs and non-loopback databases. Override the traffic or duration only with
+`K6_START_RATE`, `K6_TARGET_RATE`, `K6_RAMP_DURATION`, `K6_STEADY_DURATION`, and
+`K6_RAMP_DOWN_DURATION`.
 
 ```bash
 export K6_BASE_URL='https://staging.example.com'

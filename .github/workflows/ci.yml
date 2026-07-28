@@ -119,3 +119,4 @@ jobs:
         run: |
           node --check infra/performance/api-read.js
           node --check infra/performance/ai-job-capacity.js
+          bash -n scripts/performance/local-api-baseline.sh
