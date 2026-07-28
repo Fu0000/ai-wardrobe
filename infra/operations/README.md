@@ -130,8 +130,10 @@ token, webhook URL or acknowledgement token. If the drill cannot be completed, r
 ## Staging security and signed URL audit
 
 Prepare two dedicated Staging users. The Owner must own one READY source Asset and its related
-Job, Diagnosis and Optimization; the Attacker must not own any of them. Do not use production users
-or place tokens and signed URLs in files, arguments, screenshots or committed reports.
+Job, Diagnosis and Optimization; the Attacker must not own any of them. Also prepare a second,
+different, disposable READY Asset owned by the Owner. That asset is irreversibly deleted by the
+audit and must not be used by another test. Do not use production users or place tokens and signed
+URLs in files, arguments, screenshots or committed reports.
 
 Inject both tokens and the resource IDs through environment variables. The explicit expiry
 confirmation is required because the command waits until the real COS URL expires:
@@ -143,15 +145,18 @@ export SECURITY_OWNER_ASSET_ID='<owner asset UUID>'
 export SECURITY_OWNER_JOB_ID='<owner job UUID>'
 export SECURITY_OWNER_DIAGNOSIS_ID='<owner diagnosis UUID>'
 export SECURITY_OWNER_OPTIMIZATION_ID='<owner optimization UUID>'
+export SECURITY_DELETION_ASSET_ID='<disposable owner asset UUID>'
 export AIW_SECURITY_OWNER_ACCESS_TOKEN='<owner token>'
 export AIW_SECURITY_ATTACKER_ACCESS_TOKEN='<attacker token>'
 export AIW_SECURITY_WAIT_FOR_EXPIRY='I_ACCEPT_WAIT_FOR_SIGNED_URL_EXPIRY'
+export AIW_SECURITY_ALLOW_ASSET_DELETION='I_CONFIRM_DELETE_DEDICATED_STAGING_ASSET'
 make staging-security-audit
 unset STAGING_API_BASE_URL SECURITY_EXPECTED_ASSET_HOST
 unset SECURITY_OWNER_ASSET_ID SECURITY_OWNER_JOB_ID
 unset SECURITY_OWNER_DIAGNOSIS_ID SECURITY_OWNER_OPTIMIZATION_ID
+unset SECURITY_DELETION_ASSET_ID
 unset AIW_SECURITY_OWNER_ACCESS_TOKEN AIW_SECURITY_ATTACKER_ACCESS_TOKEN
-unset AIW_SECURITY_WAIT_FOR_EXPIRY
+unset AIW_SECURITY_WAIT_FOR_EXPIRY AIW_SECURITY_ALLOW_ASSET_DELETION
 ```
 
 The audit fails closed unless:
@@ -162,11 +167,14 @@ The audit fails closed unless:
 - every API response includes Request ID and Trace ID;
 - the returned Signed URL uses HTTPS and exactly the approved COS hostname;
 - the URL is readable before expiry and returns 401/403/404 after its server-declared expiry.
+- the disposable Asset deletion is idempotent, reaches `COMPLETED` with COS and database steps,
+  its API becomes 404, and a URL proven readable before deletion becomes unreadable while at least
+  five seconds of its original TTL remain.
 
 Terminal output records only check names, status codes, durations, TTL and boolean correlation
-signals. It never records tokens, resource IDs or the Signed URL. `AST-003` and the
-Security/Privacy Release Gate still require actual execution evidence and COS object-deletion
-verification; the script alone is not a pass.
+signals. It never records tokens, resource IDs, idempotency keys or Signed URLs. `AST-003` and the
+Security/Privacy Release Gate still require actual Staging execution evidence; the script alone is
+not a pass.
 
 ## AI model Canary and rollback
 

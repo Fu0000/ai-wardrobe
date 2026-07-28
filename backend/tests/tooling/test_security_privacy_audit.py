@@ -169,3 +169,121 @@ async def test_security_audit_fails_when_attacker_can_read_owner_resource() -> N
             )
     finally:
         await auditor.close()
+
+
+@pytest.mark.asyncio
+async def test_security_audit_proves_asset_deletion_before_signed_url_expiry() -> None:
+    asset_id = uuid4()
+    deletion_id = uuid4()
+    deleted = False
+    delete_calls = 0
+
+    async def api_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal deleted, delete_calls
+        headers = {"X-Request-ID": uuid4().hex, "X-Trace-ID": uuid4().hex}
+        if request.method == "DELETE":
+            delete_calls += 1
+            deleted = True
+            return httpx.Response(
+                202,
+                json={
+                    "id": str(deletion_id),
+                    "status": "PENDING",
+                    "reused": delete_calls > 1,
+                },
+                headers=headers,
+            )
+        if request.url.path.endswith("/deletion-status"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": str(deletion_id),
+                    "status": "COMPLETED",
+                    "completed_steps": [
+                        "COS_OBJECTS_DELETED",
+                        "DATABASE_ROWS_PURGED",
+                    ],
+                },
+                headers=headers,
+            )
+        if request.url.path.endswith("/access-url") and not deleted:
+            return httpx.Response(
+                200,
+                json={
+                    "asset_id": str(asset_id),
+                    "url": "https://cos.example/deletion-object?signature=never-record",
+                    "expires_at": (datetime.now(UTC) + timedelta(seconds=120)).isoformat(),
+                },
+                headers=headers,
+            )
+        return httpx.Response(
+            404,
+            json={"error": {"code": "ASSET_NOT_FOUND", "message": "资源不存在。"}},
+            headers=headers,
+        )
+
+    object_calls = 0
+
+    async def object_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal object_calls
+        del request
+        object_calls += 1
+        return httpx.Response(200 if object_calls == 1 else 404)
+
+    auditor = SecurityPrivacyAuditor(
+        base_url="https://staging.example.com",
+        owner_token="owner-token",
+        attacker_token="attacker-token",
+        expected_asset_host="cos.example",
+        max_ttl_seconds=900,
+        max_wait_seconds=1_200,
+        api_transport=httpx.MockTransport(api_handler),
+        object_transport=httpx.MockTransport(object_handler),
+    )
+    try:
+        result = await auditor.verify_asset_deletion(
+            asset_id=asset_id,
+            confirmed=True,
+            max_wait_seconds=300,
+            poll_interval_seconds=1,
+        )
+    finally:
+        await auditor.close()
+
+    assert delete_calls == 2
+    assert object_calls == 2
+    assert result["final_status"] == "COMPLETED"
+    assert result["signed_url_status_before_delete"] == 200
+    assert result["signed_url_status_after_delete"] == 404
+    assert result["api_status_after_delete"] == 404
+    serialized = json.dumps(result)
+    assert str(asset_id) not in serialized
+    assert str(deletion_id) not in serialized
+    assert "never-record" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_security_audit_requires_explicit_asset_deletion_confirmation() -> None:
+    async def unexpected_handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    auditor = SecurityPrivacyAuditor(
+        base_url="https://staging.example.com",
+        owner_token="owner-token",
+        attacker_token="attacker-token",
+        expected_asset_host="cos.example",
+        max_ttl_seconds=900,
+        max_wait_seconds=1_200,
+        api_transport=httpx.MockTransport(unexpected_handler),
+        object_transport=httpx.MockTransport(unexpected_handler),
+    )
+    try:
+        with pytest.raises(SecurityAuditError, match="confirmation"):
+            await auditor.verify_asset_deletion(
+                asset_id=uuid4(),
+                confirmed=False,
+                max_wait_seconds=300,
+                poll_interval_seconds=1,
+            )
+    finally:
+        await auditor.close()

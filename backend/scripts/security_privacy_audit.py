@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 import httpx
 
 _EXPIRY_CONFIRMATION = "I_ACCEPT_WAIT_FOR_SIGNED_URL_EXPIRY"
+_DELETION_CONFIRMATION = "I_CONFIRM_DELETE_DEDICATED_STAGING_ASSET"
 _PUBLIC_DNS_HOSTNAME = re.compile(
     r"(?=.{1,253}\Z)"
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
@@ -201,6 +202,11 @@ class SecurityPrivacyAuditor:
             headers={"Authorization": f"Bearer {token}"},
         )
 
+    @staticmethod
+    def _require_correlation_headers(response: httpx.Response, check: str) -> None:
+        if not response.headers.get("X-Request-ID") or not response.headers.get("X-Trace-ID"):
+            raise SecurityAuditError(f"{check} is missing correlation headers")
+
     async def probe_resource(
         self,
         probe: ResourceProbe,
@@ -281,16 +287,130 @@ class SecurityPrivacyAuditor:
             "wait_seconds": round(wait_seconds),
         }
 
+    async def verify_asset_deletion(
+        self,
+        *,
+        asset_id: UUID,
+        confirmed: bool,
+        max_wait_seconds: int,
+        poll_interval_seconds: float,
+    ) -> dict[str, object]:
+        if not confirmed:
+            raise SecurityAuditError("dedicated Staging asset deletion confirmation is required")
+        if not 10 <= max_wait_seconds <= 900:
+            raise SecurityAuditError("asset deletion wait must be 10-900 seconds")
+        if not 0.1 <= poll_interval_seconds <= 10:
+            raise SecurityAuditError("asset deletion poll interval must be 0.1-10 seconds")
+
+        access_path = f"/api/v1/assets/{asset_id}/access-url"
+        before_access = await self._get(access_path, self._owner_token)
+        self._require_correlation_headers(before_access, "deletion asset positive control")
+        if before_access.status_code != 200:
+            raise SecurityAuditError("deletion asset positive control failed")
+        before_payload = _parse_owner_payload(before_access)
+        old_url, expires_at, ttl_seconds = _signed_url_contract(
+            before_payload,
+            expected_host=self._expected_asset_host,
+            max_ttl_seconds=self._max_ttl_seconds,
+        )
+        async with self._objects.stream("GET", old_url) as response:
+            before_delete_status = response.status_code
+        if not 200 <= before_delete_status < 300:
+            raise SecurityAuditError("deletion asset URL is unreadable before deletion")
+
+        idempotency_key = f"security-delete-{uuid4().hex}"
+        delete_path = f"/api/v1/me/photos/{asset_id}"
+        headers = {
+            "Authorization": f"Bearer {self._owner_token}",
+            "Idempotency-Key": idempotency_key,
+        }
+        first = await self._api.delete(delete_path, headers=headers)
+        replay = await self._api.delete(delete_path, headers=headers)
+        for response in (first, replay):
+            self._require_correlation_headers(response, "asset deletion request")
+            if response.status_code != 202:
+                raise SecurityAuditError("asset deletion request was not accepted")
+        first_payload = _parse_owner_payload(first)
+        replay_payload = _parse_owner_payload(replay)
+        deletion_id = first_payload.get("id")
+        if (
+            not isinstance(deletion_id, str)
+            or replay_payload.get("id") != deletion_id
+            or replay_payload.get("reused") is not True
+        ):
+            raise SecurityAuditError("asset deletion idempotency contract failed")
+
+        status_path = f"/api/v1/me/photos/{asset_id}/deletion-status"
+        started_at = monotonic()
+        poll_count = 0
+        completed_payload: dict[str, Any] | None = None
+        while monotonic() - started_at <= max_wait_seconds:
+            poll_count += 1
+            response = await self._get(status_path, self._owner_token)
+            self._require_correlation_headers(response, "asset deletion status")
+            if response.status_code != 200:
+                raise SecurityAuditError("asset deletion status control failed")
+            payload = _parse_owner_payload(response)
+            status = payload.get("status")
+            if status == "COMPLETED":
+                completed_payload = payload
+                break
+            if status == "FAILED_FINAL":
+                raise SecurityAuditError("asset deletion reached a final failure")
+            if status not in {"PENDING", "PROCESSING", "FAILED_RETRYABLE"}:
+                raise SecurityAuditError("asset deletion returned an unknown status")
+            await self._sleep(poll_interval_seconds)
+        if completed_payload is None:
+            raise SecurityAuditError("asset deletion did not complete within the approved wait")
+
+        completed_steps = completed_payload.get("completed_steps")
+        if not isinstance(completed_steps, list) or not {
+            "COS_OBJECTS_DELETED",
+            "DATABASE_ROWS_PURGED",
+        }.issubset(set(completed_steps)):
+            raise SecurityAuditError("asset deletion completion steps are incomplete")
+
+        after_access = await self._get(access_path, self._owner_token)
+        self._require_correlation_headers(after_access, "deleted asset API control")
+        if _safe_error(after_access)[:2] != (404, "ASSET_NOT_FOUND"):
+            raise SecurityAuditError("deleted asset remains accessible through the API")
+
+        remaining_ttl_seconds = round((expires_at - datetime.now(UTC)).total_seconds())
+        if remaining_ttl_seconds < 5:
+            raise SecurityAuditError("old signed URL expired before deletion could be proven")
+        async with self._objects.stream("GET", old_url) as response:
+            after_delete_status = response.status_code
+        if after_delete_status not in {401, 403, 404}:
+            raise SecurityAuditError("old signed URL remained readable after asset deletion")
+        return {
+            "request_status": first.status_code,
+            "idempotent_replay_status": replay.status_code,
+            "final_status": "COMPLETED",
+            "completed_step_count": len(completed_steps),
+            "poll_count": poll_count,
+            "duration_ms": round((monotonic() - started_at) * 1_000),
+            "signed_url_status_before_delete": before_delete_status,
+            "signed_url_status_after_delete": after_delete_status,
+            "signed_url_ttl_seconds": ttl_seconds,
+            "signed_url_remaining_ttl_seconds": remaining_ttl_seconds,
+            "api_status_after_delete": after_access.status_code,
+        }
+
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
     owner_token = _required_env("AIW_SECURITY_OWNER_ACCESS_TOKEN")
     attacker_token = _required_env("AIW_SECURITY_ATTACKER_ACCESS_TOKEN")
     wait_for_expiry = os.environ.get("AIW_SECURITY_WAIT_FOR_EXPIRY") == _EXPIRY_CONFIRMATION
+    confirm_deletion = os.environ.get("AIW_SECURITY_ALLOW_ASSET_DELETION") == _DELETION_CONFIRMATION
+    primary_asset_id = _required_uuid_env("SECURITY_OWNER_ASSET_ID")
+    deletion_asset_id = _required_uuid_env("SECURITY_DELETION_ASSET_ID")
+    if primary_asset_id == deletion_asset_id:
+        raise SecurityAuditError("deletion asset must differ from the isolation fixture")
     probes = [
         ResourceProbe(
             "asset_access",
             "/api/v1/assets/{resource_id}/access-url",
-            _required_uuid_env("SECURITY_OWNER_ASSET_ID"),
+            primary_asset_id,
             "ASSET_NOT_FOUND",
         ),
         ResourceProbe(
@@ -335,10 +455,17 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
             wait_for_expiry=wait_for_expiry,
             expiry_grace_seconds=args.expiry_grace,
         )
+        deletion = await auditor.verify_asset_deletion(
+            asset_id=deletion_asset_id,
+            confirmed=confirm_deletion,
+            max_wait_seconds=args.deletion_max_wait,
+            poll_interval_seconds=args.deletion_poll_interval,
+        )
         return {
             "status": "PASSED",
             "checks": [asdict(result) for result in results],
             "signed_url": signed_url,
+            "deletion": deletion,
             "sensitive_values_recorded": False,
         }
     finally:
@@ -352,6 +479,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-ttl", type=int, default=900)
     parser.add_argument("--max-wait", type=int, default=1_200)
     parser.add_argument("--expiry-grace", type=int, default=5)
+    parser.add_argument("--deletion-max-wait", type=int, default=300)
+    parser.add_argument("--deletion-poll-interval", type=float, default=2)
     return parser.parse_args()
 
 

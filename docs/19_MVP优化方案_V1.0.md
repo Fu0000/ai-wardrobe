@@ -377,7 +377,7 @@ k6 与独立报告生成器双重判定 Diagnosis 成功率 ≥95%、关联头 1
 
 ### GATE-08 Staging Security/Privacy 审计
 
-状态：**自动化入口已完成；真实 COS 执行仍受 Staging 与双账号凭据阻塞。**
+状态：**自动化入口已完成；真实 COS 执行仍受 Staging 与双账号/一次性资产阻塞。**
 
 `make staging-security-audit` 使用两个仅经环境变量注入且必须不同的 Token，对 Owner
 的 Asset、Job、Diagnosis、Optimization 执行正向 200 控制，并验证 Attacker 读取与
@@ -387,12 +387,19 @@ Asset Access URL 还需满足 HTTPS、精确 COS Host 白名单、5～900 秒 TT
 等待受限，不能以本地 Mock 冒充真实过期。
 
 输出只包含检查名、状态码、耗时、TTL 和关联头布尔值，不记录 Token、资源 UUID、
-Staging URL、COS Host 或 Signed URL。3 个 MockTransport 测试覆盖安全来源/Host
-拒绝、完整成功链路与 Attacker 可读时失败关闭；Shell 入口语法也进入 CI。
+Staging URL、COS Host 或 Signed URL。5 个 MockTransport 测试覆盖安全来源/Host
+拒绝、完整成功链路、Attacker 可读、删除前后对象状态与显式确认失败关闭；Shell
+入口语法也进入 CI。
 
-剩余验收是用专用 Staging Owner/Attacker 和真实私有 COS 运行并归档脱敏输出，同时
-完成对象删除后的不可访问检查及授权 Prompt Injection Eval。未取得这些证据前，
-AST-06、TST-04 与 Security/Privacy Release Gate 不转为 `DONE/PASS`。
+对象删除证据也已并入同一入口，但必须提供与隔离 Fixture 不同的一次性 Owner Asset
+并显式确认不可逆删除。脚本先证明其 Signed URL 可读，再以同一 Idempotency-Key
+重放删除请求，等待 DeletionJob 完成且同时包含 COS/DB 步骤；随后要求 Asset API 为
+`ASSET_NOT_FOUND`，并在旧 URL 尚余至少 5 秒 TTL 时验证其已返回 401/403/404。报告
+仅保留聚合状态、轮询次数、耗时与 TTL，不记录 Asset/Deletion ID、Key 或 URL。
+
+剩余验收是用专用 Staging Owner/Attacker、一次性资产和真实私有 COS 运行并归档脱敏
+输出，同时完成授权 Prompt Injection Eval。未取得这些证据前，AST-06、TST-04 与
+Security/Privacy Release Gate 不转为 `DONE/PASS`。
 
 ## 六、P2 优化项（架构债）
 

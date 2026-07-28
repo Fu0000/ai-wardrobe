@@ -129,15 +129,17 @@ unset AIW_SMOKE_ACCESS_TOKEN
 
 脚本默认在验收结束后发起单图删除并等待闭包清理。JSON 报告不得包含 Access Token、签名 URL 或照片内容。
 
-Staging 双账号资源隔离与 Signed URL 真实过期必须通过独立安全审计；两个 Token 和四个
-Owner 资源 ID 均只经环境变量注入，命令与变量清单见 `infra/operations/README.md`：
+Staging 双账号资源隔离、Signed URL 真实过期与删除后旧 URL 失效必须通过独立安全
+审计；两个 Token、四个 Owner 资源 ID 和一个不同的一次性删除 Asset ID 均只经环境
+变量注入，命令与显式不可逆删除确认见 `infra/operations/README.md`：
 
 ```bash
 make staging-security-audit
 ```
 
-该命令会等待 Signed URL 的服务器声明有效期结束，不得通过缩短本地时钟或复用 Mock
-结果绕过。报告不得包含 Token、资源 UUID 或签名 URL。
+该命令会等待第一条 Signed URL 的服务器声明有效期结束，并删除第二个专用 Asset；
+不得通过缩短本地时钟、复用同一 Asset 或 Mock 结果绕过。删除证据必须在旧 URL 仍有
+有效期时证明 API 与对象均不可访问。报告不得包含 Token、资源 UUID、幂等键或签名 URL。
 
 Staging Worker 停机与队列恢复使用独立演练入口。它会真实暂停 `ai_fast` Worker 并
 产生 Provider 成本，只能在 Dashboard、On-call 和授权专用账号就绪的窗口执行；完整
@@ -183,7 +185,7 @@ Mock、本地注入或仅验证配置不得替代人员送达证据。
 | Scope | MVP 范围冻结，非目标未进入版本 | PASS |
 | Build | Lint、Type Check、Unit/Contract、微信构建、Migration 检查通过 | PASS（本地证据，需候选 SHA 重跑） |
 | Supply Chain | Python 无已知漏洞；小程序无未批准 High/Critical；例外有 Owner 和到期日 | PASS（8 个 High 已修复；1 个 Windows Vite 开发服务器例外登记至 2026-08-09） |
-| Security/Privacy | 双账号隔离、私有 URL、删除闭包和日志脱敏通过 | BLOCKED：42 个实库用例已覆盖 API 双账号隔离、关联污染和删除闭包；真实 COS Signed URL 过期/权限、对象删除与授权 Prompt Injection Eval 未验收 |
+| Security/Privacy | 双账号隔离、私有 URL、删除闭包和日志脱敏通过 | BLOCKED：42 个实库用例覆盖隔离与删除闭包，Staging 审计已强制 Signed URL 过期及删除后旧 URL/API 失效；仍缺真实 COS 执行与授权 Prompt Injection Eval |
 | AI Quality | 50+ 授权样本达到诊断、Fidelity、延迟和成本阈值 | BLOCKED：Bundle/Runner 已在 Provider 调用前强制样本分布、授权/私有引用，以及全 Validation 双人盲评、版本绑定、分歧仲裁和人工标签一致性；仍缺真实授权数据、评审记录、基线与真实 Provider 证据 |
 | Staging E2E | 微信登录、COS、全部 Worker、分享投票和冒烟通过 | BLOCKED：缺 Staging 与凭据 |
 | Reliability | Outbox 恢复、告警路由、备份恢复、Canary/回滚演练通过 | IN_PROGRESS：本地依赖告警与空库恢复通过，Staging 告警 Secret 路由和双 Ack 演练入口已失败关闭；真实 On-call 送达、含数据恢复及 Staging 演练未完成 |
