@@ -139,6 +139,18 @@ make staging-security-audit
 该命令会等待 Signed URL 的服务器声明有效期结束，不得通过缩短本地时钟或复用 Mock
 结果绕过。报告不得包含 Token、资源 UUID 或签名 URL。
 
+Staging Worker 停机与队列恢复使用独立演练入口。它会真实暂停 `ai_fast` Worker 并
+产生 Provider 成本，只能在 Dashboard、On-call 和授权专用账号就绪的窗口执行；完整
+变量和数据集保护要求见 `infra/performance/README.md`：
+
+```bash
+make staging-queue-recovery
+```
+
+脚本必须验证 Kubernetes Context、ConfigMap/API 的 Staging 身份和不可变镜像 SHA，
+并通过 EXIT/信号陷阱恢复原副本数。脱敏报告需证明停机期间任务未执行、幂等重放未
+重复建 Job、恢复后全部完成，并记录 Queue Drain Time；不得包含 Token、用户或资源 ID。
+
 ## 六、发布 Gate
 
 | Gate | `GO` 标准 | 当前状态（2026-07-28） |

@@ -1,4 +1,4 @@
-.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline event-funnel-audit staging-smoke staging-security-audit
+.PHONY: install backend-install frontend-install dev-api dev-miniapp worker beat test lint typecheck structure-check docs-check security-audit build infra-up infra-observability-up infra-down migrate local-db-drill local-alert-drill local-api-baseline staging-queue-recovery event-funnel-audit staging-smoke staging-security-audit
 
 install: backend-install frontend-install
 
@@ -61,6 +61,9 @@ local-alert-drill:
 
 local-api-baseline:
 	./scripts/performance/local-api-baseline.sh
+
+staging-queue-recovery:
+	./scripts/performance/staging-queue-recovery.sh
 
 event-funnel-audit:
 	cd backend && uv run python scripts/event_funnel_audit.py $(EVENT_AUDIT_ARGS)

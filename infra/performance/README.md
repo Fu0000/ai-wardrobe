@@ -65,3 +65,41 @@ Archive:
 - conclusion, bottleneck, capacity recommendation and follow-up Owner.
 
 Stop immediately on Blocker/Critical, 5xx >2%, uncontrolled queue growth, Provider cost ceiling breach, database saturation, cross-user access or privacy symptoms.
+
+## Staging Worker pause and queue recovery
+
+`make staging-queue-recovery` is the failure-closed `REL-003` entrypoint. It is
+disruptive and incurs real Provider cost: run it only in an approved Staging
+window with Dashboard and On-call active. It refuses to continue unless the
+Kubernetes ConfigMap and API both identify themselves as `staging`, the current
+Context exactly matches the operator-provided Context, and the deployed
+API/`ai_fast` Worker images match the expected immutable Commit SHA.
+
+Create `infra/performance/ai-job-dataset.local.json` with 1～50 records following
+the example. Every record must use a distinct dedicated Staging user, its own
+READY authorized Asset and a non-placeholder Token. The file must be private:
+
+```bash
+chmod 600 infra/performance/ai-job-dataset.local.json
+export STAGING_API_BASE_URL='https://staging.example.com'
+export STAGING_EXPECTED_SHA='<40-character deployed commit SHA>'
+export STAGING_KUBE_CONTEXT='<exact current staging context>'
+export AIW_QUEUE_DATA_FILE="$PWD/infra/performance/ai-job-dataset.local.json"
+export AIW_QUEUE_RECOVERY_CONFIRMATION='I_ACCEPT_STAGING_WORKER_PAUSE_AND_REAL_AI_COST'
+make staging-queue-recovery
+unset STAGING_API_BASE_URL STAGING_EXPECTED_SHA STAGING_KUBE_CONTEXT
+unset AIW_QUEUE_DATA_FILE AIW_QUEUE_RECOVERY_CONFIRMATION
+```
+
+The runner records the original `ai_fast` replica count, scales only that
+Deployment to zero, creates each Diagnosis once plus an idempotent replay,
+proves the Jobs remain pending while the Worker is absent, restores the exact
+replica count through an EXIT/signal trap, and waits for every Job to complete.
+The report is written with mode `0600` under the ignored
+`infra/performance/results/` directory. It includes only aggregate counts,
+recovery percentiles, Queue Drain Time and the application SHA; Tokens, user or
+resource IDs, Asset references and URLs are never recorded.
+
+This audit proves Worker-pause retention and recovery only. `REL-004` still
+requires the approved 10→30→50 AI capacity stages, resource/Dashboard evidence,
+database/COS/Quota reconciliation and low-end Android validation.

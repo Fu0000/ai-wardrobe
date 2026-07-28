@@ -332,6 +332,15 @@ Diagnosis 并发、图片队列积压与恢复、Queue Drain Time、额度/Job/D
 Dashboard 资源水位和低端安卓体验后，才能将 `TST-03` 与 Performance Gate 转为
 `DONE/PASS`。
 
+`make staging-queue-recovery` 已将 REL-003 的 Worker 停机恢复固化为失败关闭入口：
+仅在 Kubernetes Context、ConfigMap、API 均确认 Staging 且 API/`ai_fast` 镜像匹配
+不可变 SHA 时，才把该 Worker 缩容为 0；每个授权专用账号创建一次 Diagnosis 并做幂等重放，
+确认停机期间 Job 保持 Pending 后，通过 EXIT/信号陷阱恢复原副本数并等待全部完成。
+数据集必须是权限 `0600`、每条使用不同 Token 的 `*.local.json`；临时状态与最终报告
+均为 `0600`，报告仅保留聚合状态、恢复分位数和 Queue Drain Time。4 个
+MockTransport/文件安全测试覆盖脱敏成功链路、错误停机控制、私有数据集与状态完整性。
+真实 Staging 尚未执行，因此 REL-003/TST-03 状态不提前转为 `DONE`。
+
 ### GATE-08 Staging Security/Privacy 审计
 
 状态：**自动化入口已完成；真实 COS 执行仍受 Staging 与双账号凭据阻塞。**

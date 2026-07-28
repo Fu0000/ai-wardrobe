@@ -494,7 +494,7 @@ API 创建业务记录与 OutboxEvent
   部署安全校验。
 - W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
   忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
-  79 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
+  80 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
   Agent 执行入口。
 - W6 文档治理证据：00～08 文档文件名与 V1.1 正文已统一；P0 队列、模块路径、资源归属
   语义和 INF-04 能力边界已按代码事实校正；自动门禁验证 80 个唯一 WBS 任务与
@@ -522,6 +522,10 @@ API 创建业务记录与 OutboxEvent
   5 → 20 req/s 正式基线完成 4,650 次业务请求，成功率 100%、HTTP 失败率 0%、
   P95 14.99 ms、P99 20.73 ms，临时账号与目录均无残留。脱敏证据归档于
   `infra/operations/evidence/2026-07-28_local_api_performance.md`。
+- W6 Queue Recovery 代码证据：`make staging-queue-recovery` 通过 Context、
+  ConfigMap/API Staging 身份和不可变镜像 SHA 三重前置检查，只暂停 `ai_fast` Worker；
+  专用账号 Diagnosis、幂等重放、停机 Pending 控制、EXIT/信号自动恢复、全量终态轮询
+  和 Queue Drain Time 脱敏报告已自动化，真实 Staging 执行仍待环境与授权数据。
 - W6 Beta Feedback 代码证据：反馈分类/评分/正文、可选且受 Ownership 校验的关联 Job、
   Trace/页面/设备最小化上下文、幂等防重、版本化游标与用户隔离分页、诊断结果直达
   反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意
