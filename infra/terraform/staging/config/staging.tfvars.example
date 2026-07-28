@@ -1,4 +1,5 @@
 availability_zone = "ap-guangzhou-6"
+standby_availability_zone = "ap-guangzhou-7"
 
 # 必须替换为真实入口/负载均衡所在的精确私网 CIDR，禁止 0.0.0.0/0。
 api_ingress_source_cidrs = ["10.32.0.0/20"]
@@ -12,6 +13,13 @@ cos_allowed_origins = [
 # 两个既有 CAM Role 必须使用不同身份；这里只保存非敏感 Role ID。
 cos_upload_role_id  = "replace-with-upload-role-id"
 cos_runtime_role_id = "replace-with-runtime-role-id"
+
+# 先通过腾讯云 Redis 可用区配置查询确认两个数字 ID，禁止猜测或复用同一可用区。
+redis_replica_zone_ids = [100006, 100007]
+
+# 密码不进入 tfvars。Plan 前通过受控 Secret 注入：
+# export TF_VAR_postgresql_root_password='<16～32 位随机强密码>'
+# export TF_VAR_redis_password='<12～16 位随机强密码>'
 
 extra_tags = {
   cost_center = "mvp-closed-beta"

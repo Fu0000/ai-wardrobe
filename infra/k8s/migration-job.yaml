@@ -53,7 +53,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: data-ca
+              mountPath: /var/run/secrets/ai-wardrobe
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        - name: data-ca
+          secret:
+            secretName: ai-wardrobe-data-ca
+            defaultMode: 0444

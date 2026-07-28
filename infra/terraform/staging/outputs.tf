@@ -39,3 +39,20 @@ output "cos_kms_key_id" {
   value       = tencentcloud_kms_key.assets.id
   sensitive   = true
 }
+
+output "postgresql_connection" {
+  description = "PostgreSQL 私网连接与 CA 元数据；不得写入公开日志。"
+  value       = module.data_services.postgresql_connection
+  sensitive   = true
+}
+
+output "redis_instance_id" {
+  description = "Redis 实例 ID；连接密码永不输出。"
+  value       = module.data_services.redis_instance_id
+  sensitive   = true
+}
+
+output "data_service_contract" {
+  description = "不含凭据的数据层安全与版本合同。"
+  value       = module.data_services.contract
+}

@@ -9,11 +9,65 @@ override_data {
   }
 }
 
+override_data {
+  target = module.data_services.data.tencentcloud_postgresql_db_versions.required
+  values = {
+    version_set = [
+      {
+        db_major_version         = "18"
+        db_version               = "18.0"
+        db_kernel_version        = "v18.0_r1.0"
+        db_engine                = "postgresql"
+        status                   = "AVAILABLE"
+        supported_feature_names  = ["TDE"]
+        available_upgrade_target = []
+      },
+    ]
+  }
+}
+
+override_data {
+  target = module.data_services.data.tencentcloud_postgresql_specinfos.required
+  values = {
+    list = [
+      {
+        id                  = "pg-spec-test"
+        cpu                 = 2
+        memory              = 4
+        engine_version      = "18.0"
+        engine_version_name = "PostgreSQL 18"
+        qps                 = 1000
+        storage_min         = 20
+        storage_max         = 1000
+      },
+    ]
+  }
+}
+
+override_data {
+  target = module.data_services.data.tencentcloud_redis_zone_config.required
+  values = {
+    list = [
+      {
+        zone                = "ap-guangzhou-6"
+        type_id             = 17
+        type                = "master_slave_redis"
+        version             = "Redis 7.0"
+        shard_memories      = [1024]
+        mem_sizes           = [1024]
+        redis_shard_nums    = [1]
+        redis_replicas_nums = [2]
+      },
+    ]
+  }
+}
+
 run "staging_foundation_contract" {
   command = plan
 
   variables {
-    availability_zone = "ap-guangzhou-6"
+    availability_zone         = "ap-guangzhou-6"
+    standby_availability_zone = "ap-guangzhou-7"
     api_ingress_source_cidrs = [
       "10.32.0.0/20",
     ]
@@ -21,8 +75,11 @@ run "staging_foundation_contract" {
       "https://servicewechat.com",
       "https://staging.example.com",
     ]
-    cos_upload_role_id  = "4611686018427000001"
-    cos_runtime_role_id = "4611686018427000002"
+    cos_upload_role_id       = "4611686018427000001"
+    cos_runtime_role_id      = "4611686018427000002"
+    postgresql_root_password = "PgStaging#2026Strong"
+    redis_password           = "Redis#2026Aa"
+    redis_replica_zone_ids   = [100006, 100007]
   }
 
   assert {
@@ -80,5 +137,25 @@ run "staging_foundation_contract" {
       tencentcloud_cam_role_policy_attachment.cos_runtime.role_id
     )
     error_message = "Upload and runtime permissions must be attached to different identities."
+  }
+
+  assert {
+    condition = (
+      output.data_service_contract.postgresql_major_version == "18" &&
+      output.data_service_contract.postgresql_tde_enabled &&
+      output.data_service_contract.postgresql_tls_enabled &&
+      output.data_service_contract.postgresql_public_access == false
+    )
+    error_message = "PostgreSQL must remain version 18, private, TLS-enabled and TDE-enabled."
+  }
+
+  assert {
+    condition = (
+      output.data_service_contract.redis_version == "7.0" &&
+      output.data_service_contract.redis_tls_enabled &&
+      output.data_service_contract.redis_public_access == false &&
+      output.data_service_contract.redis_replicas == 2
+    )
+    error_message = "Redis must remain version 7.0, private, TLS-enabled and replicated."
   }
 }

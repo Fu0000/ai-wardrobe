@@ -25,6 +25,15 @@ def production_settings(**overrides: object) -> Settings:
         "cos_secret_key": "cos-secret-key",
         "cos_upload_secret_id": "cos-upload-secret-id",
         "cos_upload_secret_key": "cos-upload-secret-key",
+        "database_url": (
+            "postgresql+psycopg://aiw:secret@10.32.16.10:5432/ai_wardrobe"
+            "?sslmode=verify-full&sslrootcert=system"
+        ),
+        "redis_url": (
+            "rediss://:secret@10.32.16.20:6379/0"
+            "?ssl_cert_reqs=required"
+            "&ssl_ca_certs=/var/run/secrets/ai-wardrobe/redis-ca.pem"
+        ),
         "openai_enabled": True,
         "openai_api_key": "openai-key",
         "rate_limit_enabled": True,
@@ -190,3 +199,56 @@ def test_local_cos_configuration_also_requires_separate_identities() -> None:
             cos_upload_secret_id="shared-secret-id",
             cos_upload_secret_key="upload-secret-key",
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        (
+            "database_url",
+            "postgresql+psycopg://aiw:secret@10.32.16.10:5432/ai_wardrobe",
+            "sslmode=verify-full",
+        ),
+        (
+            "database_url",
+            ("postgresql+psycopg://aiw:secret@10.32.16.10:5432/ai_wardrobe?sslmode=require"),
+            "sslmode=verify-full",
+        ),
+        (
+            "redis_url",
+            "redis://:secret@10.32.16.20:6379/0",
+            "must use rediss",
+        ),
+        (
+            "redis_url",
+            "rediss://:secret@10.32.16.20:6379/0?ssl_cert_reqs=none",
+            "ssl_cert_reqs=required",
+        ),
+        (
+            "redis_url",
+            "rediss://:secret@10.32.16.20:6379/0?ssl_cert_reqs=required",
+            "ssl_ca_certs",
+        ),
+    ],
+)
+def test_deployed_data_endpoints_require_verified_tls(
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        production_settings(**{field: value})
+
+
+def test_kubernetes_mounts_data_ca_on_every_database_consumer() -> None:
+    repository_root = Path(__file__).resolve().parents[3]
+    manifests = [
+        repository_root / "infra/k8s/base/api.yaml",
+        repository_root / "infra/k8s/base/workers.yaml",
+        repository_root / "infra/k8s/migration-job.yaml",
+    ]
+
+    rendered = "\n".join(path.read_text(encoding="utf-8") for path in manifests)
+    assert rendered.count("secretName: ai-wardrobe-data-ca") == 7
+    assert rendered.count("mountPath: /var/run/secrets/ai-wardrobe") == 7
+    assert rendered.count("readOnly: true") >= 7

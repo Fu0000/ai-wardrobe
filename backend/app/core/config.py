@@ -3,6 +3,7 @@ import binascii
 from functools import lru_cache
 from ipaddress import ip_network
 from typing import Literal
+from urllib.parse import parse_qs, urlsplit
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -268,6 +269,26 @@ class Settings(BaseSettings):
             raise ValueError("deployed AI provider API must use HTTPS")
         if not self.rate_limit_enabled:
             raise ValueError("rate limiting must be enabled in deployed environments")
+        database_url = urlsplit(self.database_url)
+        database_query = parse_qs(database_url.query)
+        if (
+            database_url.scheme != "postgresql+psycopg"
+            or database_query.get("sslmode") != ["verify-full"]
+            or not database_query.get("sslrootcert")
+        ):
+            raise ValueError(
+                "deployed PostgreSQL must use psycopg with sslmode=verify-full and an sslrootcert"
+            )
+        redis_url = urlsplit(self.redis_url)
+        redis_query = parse_qs(redis_url.query)
+        if (
+            redis_url.scheme != "rediss"
+            or redis_query.get("ssl_cert_reqs") != ["required"]
+            or not redis_query.get("ssl_ca_certs")
+        ):
+            raise ValueError(
+                "deployed Redis must use rediss with ssl_cert_reqs=required and ssl_ca_certs"
+            )
         if not self.trusted_proxy_cidrs:
             raise ValueError("trusted proxy CIDRs are required in deployed environments")
         if not self.otel_enabled or not self.otel_exporter_otlp_endpoint.startswith(

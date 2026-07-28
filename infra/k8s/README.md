@@ -17,7 +17,11 @@ All containers run as UID/GID `10001`, drop Linux capabilities, disable privileg
 
 ## Required cluster state
 
-Create `ai-wardrobe-secrets` from `secret.example.yaml` using the platform secret manager. Never commit the rendered Secret.
+Create both `ai-wardrobe-secrets` and `ai-wardrobe-data-ca` from
+`secret.example.yaml` using the platform secret manager. Never commit the
+rendered Secrets. The CA Secret is mounted read-only into every API, Worker,
+Beat and migration Pod; database URLs must reference those exact paths and
+require full certificate verification.
 
 The GitHub `staging` environment must provide:
 

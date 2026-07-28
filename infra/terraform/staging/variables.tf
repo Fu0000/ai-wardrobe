@@ -41,6 +41,16 @@ variable "availability_zone" {
   }
 }
 
+variable "standby_availability_zone" {
+  description = "Managed PostgreSQL Standby 使用的不同可用区。"
+  type        = string
+
+  validation {
+    condition     = startswith(var.standby_availability_zone, "${var.region}-")
+    error_message = "standby_availability_zone 必须属于选定的 region。"
+  }
+}
+
 variable "vpc_cidr" {
   description = "Staging VPC 私网地址段；当前拓扑固定，变更必须经过网络评审。"
   type        = string
@@ -116,6 +126,56 @@ variable "cos_runtime_role_id" {
   validation {
     condition     = can(regex("^[0-9]{10,32}$", var.cos_runtime_role_id))
     error_message = "cos_runtime_role_id 必须是 10～32 位数字 CAM Role ID。"
+  }
+}
+
+variable "postgresql_root_password" {
+  description = "PostgreSQL 管理账号密码；仅通过 TF_VAR 环境变量或受控 Secret 注入。"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition = (
+      length(var.postgresql_root_password) >= 16 &&
+      length(var.postgresql_root_password) <= 32 &&
+      can(regex("[a-z]", var.postgresql_root_password)) &&
+      can(regex("[A-Z]", var.postgresql_root_password)) &&
+      can(regex("[0-9]", var.postgresql_root_password)) &&
+      can(regex("[^A-Za-z0-9]", var.postgresql_root_password))
+    )
+    error_message = "postgresql_root_password 必须为 16～32 位，并包含大小写字母、数字和特殊字符。"
+  }
+}
+
+variable "redis_password" {
+  description = "Redis 密码；仅通过 TF_VAR 环境变量或受控 Secret 注入。"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition = (
+      length(var.redis_password) >= 12 &&
+      length(var.redis_password) <= 16 &&
+      can(regex("[a-z]", var.redis_password)) &&
+      can(regex("[A-Z]", var.redis_password)) &&
+      can(regex("[0-9]", var.redis_password)) &&
+      can(regex("[^A-Za-z0-9]", var.redis_password))
+    )
+    error_message = "redis_password 必须为 12～16 位，并包含大小写字母、数字和特殊字符。"
+  }
+}
+
+variable "redis_replica_zone_ids" {
+  description = "Redis 两个副本所在可用区的数字 ID，必须来自目标地域容量查询。"
+  type        = list(number)
+
+  validation {
+    condition = (
+      length(var.redis_replica_zone_ids) == 2 &&
+      length(distinct(var.redis_replica_zone_ids)) == 2 &&
+      alltrue([for zone_id in var.redis_replica_zone_ids : zone_id > 0])
+    )
+    error_message = "redis_replica_zone_ids 必须包含两个不同的正数可用区 ID。"
   }
 }
 

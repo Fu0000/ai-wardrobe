@@ -78,6 +78,12 @@ jobs:
           kubectl apply -f infra/k8s/base/namespace.yaml
           kubectl apply -f infra/k8s/base/configmap.yaml
           kubectl -n ai-wardrobe get secret ai-wardrobe-secrets
+          for ca_key in postgresql-ca.pem redis-ca.pem; do
+            escaped_key="${ca_key//./\\.}"
+            kubectl -n ai-wardrobe get secret ai-wardrobe-data-ca \
+              --output "jsonpath={.data.${escaped_key}}" \
+              | grep -q .
+          done
           test -n "$GHCR_PULL_USERNAME"
           test -n "$GHCR_PULL_TOKEN"
           test -n "$TRUSTED_PROXY_CIDRS_JSON"

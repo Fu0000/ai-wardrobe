@@ -551,8 +551,10 @@ API 创建业务记录与 OutboxEvent
 - W6 INF-02 代码证据：Staging-only Terraform 根模块已锁定 Terraform 与腾讯云
   Provider 版本，固化私有 VPC/应用与数据子网、API/DB/Redis 最小入口安全组、私有
   KMS 加密 COS、精确 HTTPS CORS、上传/运行时 CAM Role 分权、销毁保护与远程状态
-  操作合同；CI 只执行无凭据 `init -backend=false` 与 Schema 校验。Managed
-  PostgreSQL/Redis/TKE、真实 Plan/Apply、云上连通性和成本复核仍待后续批次及审批。
+  操作合同；Managed PostgreSQL 固定 18、跨区 Standby、TDE/TLS、14 天物理/日志备份，
+  Managed Redis 固定 7.0 双副本、TLS/备份/无公网，应用部署配置强制
+  PostgreSQL `verify-full` 与 Redis `rediss`；CI 执行无凭据 Schema 和 Mock Plan
+  合同校验。TKE、真实 Plan/Apply、云上连通性和成本复核仍待后续批次及审批。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
   含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
   过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。
