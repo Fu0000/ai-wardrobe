@@ -24,7 +24,7 @@
 | 维度 | 现状 |
 |---|---|
 | 后端测试 | 38 个文件，145 个测试函数，`ruff` 与 `mypy --strict`（88 文件）全通过 |
-| 集成测试 | `tests/integration/test_infrastructure.py` 已存在，3 个测试，默认 `skip` |
+| 集成测试 | `tests/integration/platform/test_infrastructure.py` 已存在，3 个测试，默认 `skip` |
 | 小程序测试 | 5 个文件，13 个用例，零页面测试、零 services 测试 |
 | 数据库迁移 | 10 版 Alembic，CI 执行空库升级、模型漂移检查与离线 SQL 渲染 |
 | 埋点事件 | `docs/15` 定义 19 个，已实现 4 个 |
@@ -86,7 +86,7 @@
 2. `mark_failed` 在 `attempt_count` 超过阈值（建议 10 次，约覆盖 2.5 小时重试窗口）时转入 `DEAD_LETTER`，不再排程。
 3. `metrics()` 将 `dead_letter_count` 与 `failed_count` 分离上报，`infra/observability/alerts.yml` 为前者单列告警规则。
 
-**验收**：`tests/test_outbox_dispatcher.py` 补充用例，断言不可发布事件在达到阈值后停止重试且不再计入 `failed_count`。
+**验收**：`tests/events/test_outbox_dispatcher.py` 补充用例，断言不可发布事件在达到阈值后停止重试且不再计入 `failed_count`。
 
 ### FIX-04 资料页加载失败会静默撤销 AI 授权
 
@@ -312,13 +312,21 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 
 ### ARCH-04 规约对齐
 
-| 规约 | 现状 | 处理 |
+状态：**已完成。**
+
+| 规约 | 落地结果 | 自动化证据 |
 |---|---|---|
-| 启停统一走 `scripts/*.sh` | 无 `scripts/` 目录，全部经 Makefile 直调 `uv` / `pnpm` | 补脚本层，Makefile 转为调用脚本 |
-| 日志输出到 `logs/` | 无该目录 | 随脚本层一并建立 |
+| 启停统一走 `scripts/*.sh` | Makefile 只保留稳定命令名，安装、开发、质量、基础设施与 Staging 冒烟进入 5 个分组脚本；公共命令发现和退出码处理归入 `scripts/lib/common.sh` | `bash -n` 与 Make 干运行通过；新入口实际跑通 lint、类型检查、构建和双端审计 |
+| 日志输出到 `logs/` | 所有分组脚本通过 `tee` 同步输出到终端和带时间/PID 的本地日志；支持 `AIW_LOG_DIR` 覆盖，日志正文被 Git 忽略 | 各质量命令均生成独立日志且保持原命令退出码 |
 | 单文件不超过 800 行 | 最大文件 `pages/index/index.vue` 为 789 行 | ARCH-03 已解决 |
-| 每层目录不超过 8 个文件 | 7 个目录超限，最多 13 个 | 随模块重组处理 |
-| 项目级 `CLAUDE.md` 与 `docs/agent/` | 均缺失 | 补建，控制在 60 至 80 行 |
+| 每层目录不超过 8 个文件 | 小程序 Store/Service 的测试与共享基础设施分层；Job 执行/恢复进入 `jobs/runtime`；后端 45 个单元测试和 7 个集成测试按领域组织 | `check-structure.sh` 检查 71 个工程目录并接入 `make lint` 与 CI；文档序列和 Alembic 迁移作为有序注册表明确例外 |
+| 项目级 `CLAUDE.md` 与 `docs/agent/` | `CLAUDE.md` 73 行，`docs/agent/README.md` 66 行，只提供执行路由与清单，不复制产品契约 | `wc -l` 与结构门禁通过 |
+
+本地验证包括 Ruff、格式检查、严格 Mypy（157 个文件）、226 个单元/契约测试、
+24 个真实 PostgreSQL/Redis 集成测试、小程序 61 个测试、ESLint、`vue-tsc`、微信构建
+与双端生产依赖审计。远端
+[CI run 30339243334](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339243334)
+在 `develop@8d4af16` 上完成，Backend 与 Miniapp Job 均为 `success`。
 
 ### ARCH-05 文档一致性
 
@@ -357,7 +365,7 @@ FIX-01、FIX-06 与 GATE-04 之间存在一条隐含主线：三者都指向「�
 - `docs/15` 第八节的埋点验收对每个 MVP 功能成立。
 - CI 中集成测试实际执行而非 skip。
 
-P2 条目不阻断封测；ARCH-01、ARCH-02 与 ARCH-03 已完成，剩余架构债按封测期间的真实回归与维护
+P2 条目不阻断封测；ARCH-01 至 ARCH-04 已完成，剩余架构债按封测期间的真实回归与维护
 成本继续排期。
 
 ## 九、明确不做

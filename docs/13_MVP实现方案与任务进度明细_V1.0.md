@@ -445,7 +445,7 @@ API 创建业务记录与 OutboxEvent
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
 - `NOT_STARTED`：1 项。
-- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 156 个文件）、250
+- 已验证：后端 Ruff、严格 Mypy（源码/测试/脚本共 157 个文件）、250
   个 PostgreSQL/Redis 实际执行测试、十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
   小程序 ESLint、类型检查、61 个测试、微信构建与 High 依赖漏洞门禁。
@@ -454,8 +454,8 @@ API 创建业务记录与 OutboxEvent
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
 - 远端 CI 证据：GitHub Actions
-  [CI run 30338199750](https://github.com/Fu0000/ai-wardrobe/actions/runs/30338199750)
-  在 `develop@db08463` 上完成，Backend 与 Miniapp Job 均为 `success`。
+  [CI run 30339243334](https://github.com/Fu0000/ai-wardrobe/actions/runs/30339243334)
+  在 `develop@8d4af16` 上完成，Backend 与 Miniapp Job 均为 `success`。
 - W3 代码证据：8 场景选择、诊断创建/查询、幂等键弱网保留、Quota
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
@@ -474,6 +474,10 @@ API 创建业务记录与 OutboxEvent
 - W6 Privacy/Hardening 代码证据：账号与单图异步 DeletionJob、原图到诊断/优化/分享派生图的闭包清理、COS/DB 两阶段重试、删除竞态稳定检查、账号删除后的本地已保存照片和业务状态清理、依赖感知 Readiness、1 MiB JSON Body Limit、CORS 与安全响应头。
 - W6 Observability 代码证据：API → Outbox → Celery → AI Provider Trace 传播、`X-Trace-ID`/结构化日志关联、HTTP/Worker/AI/Outbox/Product 指标、业务终态失败计数、Pending Age/Failed Count，以及预置 Collector、Prometheus、Grafana Dashboard、Alertmanager 和七条告警规则。
 - W6 Release 代码证据：非 Root/只读文件系统生产镜像、不可变 SHA Staging 部署、前向 Migration Job、分队列 Worker、Readiness Rollout Gate、provenance/SBOM，以及默认执行数据清理的授权样本全链路冒烟脚本。
+- W6 工程治理代码证据：Makefile 已统一委托 `scripts/*.sh`，本地命令输出进入被 Git
+  忽略的 `logs/`；后端运行时与测试、小程序 Store/Service 已按职责分层；CI 强制检查
+  71 个工程目录均不超过 8 个直接文件；`CLAUDE.md` 与 `docs/agent/` 已提供受控长度的
+  Agent 执行入口。
 - W6 Security/CI 代码证据：应用层显式 Trusted Proxy CIDR、从右向左解析
   `X-Forwarded-For`、容器关闭 Uvicorn 全局 Proxy Header 信任、生产环境拒绝
   全地址段、已知本地默认密钥和非 HTTPS 外部 Provider，并预校验 Fernet Key
