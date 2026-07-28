@@ -94,30 +94,35 @@ architecture_docs=(
   "${wbs_file}"
 )
 
-if rg -n 'OwnershipGuard|ScopedRepository|Scoped Repository' "${architecture_docs[@]}"; then
+if grep -En 'OwnershipGuard|ScopedRepository|Scoped Repository' "${architecture_docs[@]}"; then
   report_failure "架构文档仍引用不存在的资源归属类名"
 fi
 
-if rg -n '`(background|governance)`' \
+if grep -En '`(background|governance)`' \
   "${AIW_REPO_ROOT}/docs/02_技术方案设计_TDD_V1.1.md" \
   "${wbs_file}"; then
   report_failure "P0 文档仍引用过期 Celery 队列"
 fi
 
 for queue_name in ai_fast image_generation media_generation maintenance; do
-  rg -q "${queue_name}" "${wbs_file}" ||
+  grep -qF "${queue_name}" "${wbs_file}" ||
     report_failure "WBS 缺少 P0 队列 ${queue_name}"
 done
 
-if awk -F "|" '/^\| INF-04 / && /CLS/' "${wbs_file}" | rg -q .; then
+if awk -F "|" '/^\| INF-04 / && /CLS/' "${wbs_file}" | grep -q .; then
   report_failure "INF-04 名称或完成条件仍把未接入的 CLS 计为代码能力"
 fi
 
-if rg -n '0[0-8]_[^` )]+_V1\.0\.md' \
-  "${AIW_REPO_ROOT}/AGENTS.md" \
-  "${AIW_REPO_ROOT}/CLAUDE.md" \
-  "${AIW_REPO_ROOT}/README.md" \
-  "${AIW_REPO_ROOT}/docs"; then
+reference_files=(
+  "${AIW_REPO_ROOT}/AGENTS.md"
+  "${AIW_REPO_ROOT}/CLAUDE.md"
+  "${AIW_REPO_ROOT}/README.md"
+)
+while IFS= read -r -d "" reference_file; do
+  reference_files+=("${reference_file}")
+done < <(find "${AIW_REPO_ROOT}/docs" -type f -name "*.md" -print0)
+
+if grep -En '0[0-8]_[^` )]+_V1\.0\.md' "${reference_files[@]}"; then
   report_failure "仍有核心 V1.1 文档使用旧 V1.0 文件名"
 fi
 
