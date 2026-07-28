@@ -16,6 +16,8 @@ from app.evaluation.regression import (
     compare_reports,
     load_report,
     release_gate_failures,
+    sample_field_assertion,
+    validate_expected_model,
     write_report,
 )
 
@@ -245,6 +247,9 @@ def test_cli_refuses_to_overwrite_its_baseline(
             max_quality_drop=0.03,
             max_latency_increase_percent=20.0,
             max_cost_increase_percent=20.0,
+            expected_model=None,
+            expected_critic_model=None,
+            expected_production_model=None,
             enforce_release_gates=True,
         ),
     )
@@ -283,6 +288,7 @@ def test_cli_writes_failure_report_then_returns_nonzero_for_regression(
             max_quality_drop=0.03,
             max_latency_increase_percent=20.0,
             max_cost_increase_percent=20.0,
+            expected_model="candidate-model",
             enforce_release_gates=False,
         ),
     )
@@ -303,6 +309,31 @@ def test_cli_writes_failure_report_then_returns_nonzero_for_regression(
     assert isinstance(regression, dict)
     assert command_gate["status"] == "FAILED"
     assert regression["status"] == "FAILED"
+    assertions = written["model_assertions"]
+    assert isinstance(assertions, list)
+    first_assertion = assertions[0]
+    assert isinstance(first_assertion, dict)
+    assert first_assertion["status"] == "FAILED"
+
+
+def test_model_assertion_detects_fallback_and_invalid_identifiers() -> None:
+    report = diagnosis_report()
+    samples = report["samples"]
+    assert isinstance(samples, list)
+    typed_samples = cast(list[dict[str, object]], samples)
+    typed_samples[0]["model"] = "candidate-model"
+    typed_samples[1]["model"] = "fallback-model"
+
+    assertion = sample_field_assertion(
+        report,
+        field="model",
+        expected="candidate-model",
+    )
+
+    assert assertion["status"] == "FAILED"
+    assert assertion["mismatch_sample_ids"] == ["sd_sample_002"]
+    with pytest.raises(RegressionReportError):
+        validate_expected_model("model with spaces")
 
 
 def test_load_report_rejects_non_object_json(tmp_path: Path) -> None:

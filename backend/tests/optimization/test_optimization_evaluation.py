@@ -7,6 +7,7 @@ from app.evaluation.optimization import (
     OptimizationSampleResult,
     aggregate_automated,
     aggregate_reviews,
+    build_report,
     contract_checks,
 )
 from app.modules.optimization.schema import OptimizationCriticOutput
@@ -21,6 +22,7 @@ def sample(*, decision: str = "REJECT") -> OptimizationEvaluationSample:
             "source_reference": "cos-private://evals/optimization/before-001.jpg",
             "candidate_reference": "cos-private://evals/optimization/after-001.jpg",
             "consent_reference": "consent-001",
+            "production_image_model": "gpt-image-stable",
             "generation_attempt": 1,
             "exposed_to_user": False,
             "production_latency_ms": 20_000,
@@ -100,6 +102,7 @@ def result(index: int, *, passed: bool = True) -> OptimizationSampleResult:
         prompt_version="prompt-v1",
         schema_version="schema-v1",
         evaluator_version="eval-v1",
+        production_image_model="gpt-image-stable",
         generation_attempt=1,
         exposed_to_user=False,
         production_latency_ms=20_000 + index,
@@ -134,6 +137,17 @@ def test_manifest_rejects_exposed_failure_without_failure_dimension() -> None:
     raise AssertionError("rejected sample without a failure dimension was accepted")
 
 
+def test_manifest_requires_a_traceable_production_image_model() -> None:
+    payload = sample().model_dump(mode="json")
+    del payload["production_image_model"]
+
+    try:
+        OptimizationEvaluationSample.model_validate(payload)
+    except ValueError:
+        return
+    raise AssertionError("sample without a production image model was accepted")
+
+
 def test_automated_summary_applies_optimization_release_gates() -> None:
     report = aggregate_automated([result(index) for index in range(50)])
 
@@ -145,6 +159,19 @@ def test_automated_summary_applies_optimization_release_gates() -> None:
         "production_p90_collected_and_under_60_seconds": True,
         "production_cost_100_percent_coverage": True,
         "zero_rejected_results_exposed": True,
+    }
+
+
+def test_report_records_production_and_critic_model_versions() -> None:
+    report = build_report([result(1)])
+
+    assert report["versions"] == {
+        "dataset_versions": ["v0.1"],
+        "model_versions": ["gpt-5.6-terra"],
+        "production_image_model_versions": ["gpt-image-stable"],
+        "prompt_version": "style-optimization-critic-2026-07-26.1",
+        "schema_version": "style-optimization-critic-v1.0.0",
+        "evaluator_version": "style-optimization-evaluator-v1.0.0",
     }
 
 

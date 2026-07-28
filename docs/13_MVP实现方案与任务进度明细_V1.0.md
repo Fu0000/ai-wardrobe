@@ -473,7 +473,8 @@ API 创建业务记录与 OutboxEvent
 - W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
 - AI Eval 回归门禁代码证据：诊断与优化 Runner 已支持固定样本/数据集版本比较、
   质量绝对降幅、Schema 零退化、P95 延迟和平均成本相对涨幅阈值，并在失败时落盘报告
-  后返回非零退出码；50+ 授权样本、真实基线归档和 Canary 接线仍待验收。
+  后返回非零退出码；AI Canary 非零放量已以前置 Eval 为硬门禁，并校验实际候选模型。
+  50+ 授权样本、真实基线归档、受保护环境密钥与首次 Staging 运行仍待验收。
 - W4 代码证据：Change Budget Level 1～3、Optimization API、GPT Image Edit、保比例输出尺寸、双次有界生成、结构化 Critic、六类保持约束、失败释放额度、Before/After 滑杆、任务恢复，以及 Fidelity Eval/Rubric；Optimization Executor 已按生成尝试、Critic 评审和结果持久化拆分，非预期编程异常不再降级成普通瞬时故障。
 - 小程序架构代码证据：六个后台任务页面已统一到 `useJobPolling` 生命周期与竞态隔离；
   loading / error / empty 状态、进度条、主操作与隐私提示已抽为共享组件；

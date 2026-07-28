@@ -20,6 +20,8 @@ from app.evaluation.regression import (
     compare_reports,
     load_report,
     release_gate_failures,
+    sample_field_assertion,
+    validate_expected_model,
     write_report,
 )
 from app.modules.ai.contracts import StructuredVisionRequest
@@ -432,6 +434,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=20.0,
     )
+    parser.add_argument("--expected-model")
     parser.add_argument("--enforce-release-gates", action="store_true")
     return parser.parse_args()
 
@@ -452,6 +455,7 @@ def main() -> int:
     )
     try:
         thresholds.validate()
+        validate_expected_model(args.expected_model)
         if baseline_equals_output:
             raise RegressionReportError("baseline and output paths must differ")
         if args.baseline is not None:
@@ -489,6 +493,15 @@ def main() -> int:
     report = build_report(results, reviews)
     failures: list[str] = []
     try:
+        if args.expected_model is not None:
+            model_assertion = sample_field_assertion(
+                report,
+                field="model",
+                expected=args.expected_model,
+            )
+            report["model_assertions"] = [model_assertion]
+            if model_assertion["status"] != "PASSED":
+                failures.append("EXPECTED_MODEL_MISMATCH:diagnosis")
         if baseline is not None and baseline_sha256 is not None:
             comparison = compare_reports(
                 report,

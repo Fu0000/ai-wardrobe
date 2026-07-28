@@ -180,7 +180,13 @@ Provider 前失败，候选质量超阈值时先原子落报告再返回非零�
 `evals/style_diagnosis/manifest.example.jsonl` 与
 `evals/style_optimization/manifest.example.jsonl` 仍各只有 1 行示例。`docs/12` 要求
 各 50+ 授权样本，且诊断集需覆盖 6 类场景、含 10 张以上低质量输入与 5 张以上
-Prompt Injection 样本；真实基线报告与 AI Canary 硬门禁尚待完成。
+Prompt Injection 样本；真实基线报告与 AI Canary 的 Staging 运行证据尚待完成。
+
+AI Canary 工作流代码现已在任何非零放量前下载并校验不可变私有 Eval Bundle，按候选
+类型执行对应 Runner，归档脱敏报告，并仅在门禁通过后修改 Staging ConfigMap；`0%`
+紧急回滚不依赖 Eval。Runner 同时断言实际诊断/Critic 模型和 Optimization
+`production_image_model`，避免 fallback 或错误候选数据导致假通过。待办缩小为配置
+受保护环境密钥、提供真实授权 Bundle 并留存首次 Staging 运行证据。
 
 **影响**：`docs/13` 第 9.2 节 M1 Gate 的 `Diagnosis Success Rate ≥95%`、`P95 < 30s`、`Critic First-pass ≥75%` 四个数值**没有任何数据来源**，AI Quality Gate 无法脱离 `BLOCKED`。
 
@@ -189,7 +195,8 @@ Prompt Injection 样本；真实基线报告与 AI Canary 硬门禁尚待完成�
 1. 立即启动授权样本采集 —— 这是唯一有外部前置周期的事项，不能排到最后。
 2. ~~Eval Runner 增加 `--baseline` 与退化阈值判定，超阈值返回非零退出码。~~
    （代码完成，待授权数据实测）
-3. 将该判定接入 AI Canary 工作流，作为模型变更的硬门禁。
+3. ~~将该判定接入 AI Canary 工作流，作为模型变更的硬门禁。~~
+   （代码完成，待 Staging 实跑）
 
 **验收**：两个数据集达到 `docs/12` 的样本量与分布要求；基线报告归档并可被 `docs/16` 引用。
 

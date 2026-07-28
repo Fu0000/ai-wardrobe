@@ -20,6 +20,8 @@ from app.evaluation.regression import (
     compare_reports,
     load_report,
     release_gate_failures,
+    sample_field_assertion,
+    validate_expected_model,
     write_report,
 )
 from app.modules.ai.contracts import StructuredVisionRequest
@@ -71,6 +73,11 @@ class OptimizationEvaluationSample(BaseModel):
     source_reference: str = Field(min_length=1)
     candidate_reference: str = Field(min_length=1)
     consent_reference: str = Field(min_length=1)
+    production_image_model: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
     generation_attempt: int = Field(ge=1, le=3)
     exposed_to_user: bool = False
     production_latency_ms: int | None = Field(default=None, ge=1)
@@ -114,6 +121,7 @@ class OptimizationSampleResult:
     prompt_version: str
     schema_version: str
     evaluator_version: str
+    production_image_model: str
     generation_attempt: int
     exposed_to_user: bool
     production_latency_ms: int | None
@@ -400,6 +408,7 @@ class OptimizationEvaluationRunner:
                 prompt_version=OPTIMIZATION_CRITIC_PROMPT.prompt_version,
                 schema_version=OPTIMIZATION_CRITIC_PROMPT.schema_version,
                 evaluator_version=EVALUATOR_VERSION,
+                production_image_model=sample.production_image_model,
                 generation_attempt=sample.generation_attempt,
                 exposed_to_user=sample.exposed_to_user,
                 production_latency_ms=sample.production_latency_ms,
@@ -435,6 +444,7 @@ class OptimizationEvaluationRunner:
             prompt_version=OPTIMIZATION_CRITIC_PROMPT.prompt_version,
             schema_version=OPTIMIZATION_CRITIC_PROMPT.schema_version,
             evaluator_version=EVALUATOR_VERSION,
+            production_image_model=sample.production_image_model,
             generation_attempt=sample.generation_attempt,
             exposed_to_user=sample.exposed_to_user,
             production_latency_ms=sample.production_latency_ms,
@@ -485,6 +495,9 @@ def build_report(
             "model_versions": sorted(
                 {result.model for result in results if result.model is not None}
             ),
+            "production_image_model_versions": sorted(
+                {result.production_image_model for result in results}
+            ),
             "prompt_version": OPTIMIZATION_CRITIC_PROMPT.prompt_version,
             "schema_version": OPTIMIZATION_CRITIC_PROMPT.schema_version,
             "evaluator_version": EVALUATOR_VERSION,
@@ -520,6 +533,8 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=20.0,
     )
+    parser.add_argument("--expected-critic-model")
+    parser.add_argument("--expected-production-model")
     parser.add_argument("--enforce-release-gates", action="store_true")
     return parser.parse_args()
 
@@ -540,6 +555,8 @@ def main() -> int:
     )
     try:
         thresholds.validate()
+        validate_expected_model(args.expected_critic_model)
+        validate_expected_model(args.expected_production_model)
         if baseline_equals_output:
             raise RegressionReportError("baseline and output paths must differ")
         if args.baseline is not None:
@@ -579,6 +596,28 @@ def main() -> int:
     report = build_report(results, reviews)
     failures: list[str] = []
     try:
+        model_assertions: list[dict[str, object]] = []
+        expected_fields = (
+            ("model", args.expected_critic_model, "critic"),
+            (
+                "production_image_model",
+                args.expected_production_model,
+                "production_image",
+            ),
+        )
+        for field, expected_model, label in expected_fields:
+            if expected_model is None:
+                continue
+            assertion = sample_field_assertion(
+                report,
+                field=field,
+                expected=expected_model,
+            )
+            model_assertions.append(assertion)
+            if assertion["status"] != "PASSED":
+                failures.append(f"EXPECTED_MODEL_MISMATCH:{label}")
+        if model_assertions:
+            report["model_assertions"] = model_assertions
         if baseline is not None and baseline_sha256 is not None:
             comparison = compare_reports(
                 report,

@@ -81,6 +81,36 @@ This local drill deliberately does not claim notification delivery. Before Stagi
 
 The Staging workflow `AI Canary Staging` uses a deterministic hash of internal User ID to select a sticky 0/10/50/100% cohort. Candidate identifiers are non-secret ConfigMap values. Every newly created AI Job persists its resolved routes, timeout, cost ceiling, quality threshold, release track and optimization attempt limit.
 
+Any non-zero rollout first runs the relevant Diagnosis and/or Optimization Eval and cannot patch the
+ConfigMap unless the fixed-dataset comparison and current Release Gates pass. A `0%` emergency
+rollback deliberately bypasses Eval so rollback is never blocked by Provider or data availability.
+
+Configure these protected `staging` environment secrets before a non-zero run:
+
+- `STAGING_AI_EVAL_BUNDLE_URL`: short-lived HTTPS read URL for the immutable Eval ZIP;
+- `STAGING_AI_EVAL_OPENAI_API_KEY` and optional `STAGING_AI_EVAL_OPENAI_BASE_URL`;
+- `STAGING_AI_EVAL_COS_BUCKET`, read-only `STAGING_AI_EVAL_COS_SECRET_ID` /
+  `STAGING_AI_EVAL_COS_SECRET_KEY`, and optional `STAGING_AI_EVAL_COS_REGION`.
+
+The COS identity must only read the authorized Eval object prefixes and must not have write/delete
+permission. The ZIP is limited to 10 MiB and must contain exactly:
+
+```text
+diagnosis/baseline.json
+diagnosis/manifest.jsonl
+optimization/baseline.json
+optimization/manifest.jsonl
+```
+
+Generate the archive outside the repository in an access-controlled directory. Record its lowercase
+SHA-256 as the workflow `eval_bundle_sha256` input. The workflow verifies that digest, rejects ZIP
+links, traversal, extra/missing files and oversized content, and never uploads the private input
+bundle. Only redacted candidate reports are retained as workflow artifacts for 90 days.
+
+For an image-model Canary, each Optimization Manifest record must contain a
+`production_image_model` exactly matching the workflow candidate. For diagnosis and Critic
+candidates, every Provider result must use the requested model; fallback usage fails the gate.
+
 Worker execution reads the persisted snapshot, not the current environment. Therefore:
 
 - changing the Canary percentage affects only new Jobs;
@@ -90,7 +120,8 @@ Worker execution reads the persisted snapshot, not the current environment. Ther
 
 Promotion sequence:
 
-1. Run offline Eval and authorized shadow comparison.
+1. Prepare the immutable authorized Eval bundle and start the workflow; the offline regression gate
+   runs before any non-zero policy change.
 2. Apply 10% in Staging and execute the full smoke/Eval set.
 3. Compare stable vs candidate by model label for quality, error rate, P95 and unit cost.
 4. Promote to 50%, observe at least one agreed traffic window, then promote to 100%.

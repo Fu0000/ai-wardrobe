@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,9 @@ from typing import Literal
 
 class RegressionReportError(ValueError):
     pass
+
+
+_MODEL_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +321,39 @@ def release_gate_failures(report: dict[str, object]) -> list[str]:
         for name, passed in sorted(gates.items())
         if passed is not True
     ]
+
+
+def validate_expected_model(value: str | None) -> None:
+    if value is not None and _MODEL_IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise RegressionReportError("expected model identifier is invalid")
+
+
+def sample_field_assertion(
+    report: dict[str, object],
+    *,
+    field: str,
+    expected: str,
+) -> dict[str, object]:
+    validate_expected_model(expected)
+    _sample_ids(report)
+    samples = report["samples"]
+    if not isinstance(samples, list):
+        raise RegressionReportError("evaluation report samples must be an array")
+    mismatches = sorted(
+        sample["sample_id"]
+        for sample in samples
+        if isinstance(sample, dict)
+        and isinstance(sample.get("sample_id"), str)
+        and sample.get(field) != expected
+    )
+    return {
+        "field": field,
+        "expected": expected,
+        "status": "PASSED" if not mismatches else "FAILED",
+        "sample_count": len(samples),
+        "mismatch_count": len(mismatches),
+        "mismatch_sample_ids": mismatches,
+    }
 
 
 def write_report(path: Path, report: dict[str, object]) -> None:

@@ -50,6 +50,9 @@ evals/
 
 评估结果至少包含成功率、Schema 通过率、Primary Issue 命中、建议可操作性、场景适配、P50/P90/P95、单位成本和失败分类。
 
+Optimization Manifest 的每条记录必须从生成任务记录带入 `production_image_model`，
+用于核对候选 Before/After 的图片模型版本；Critic 模型由 Runner 的实际响应记录。
+
 ## 运行诊断评估
 
 真实 Manifest 与人工评审文件不得提交仓库。配置 `AIW_OPENAI_*` 和
@@ -62,6 +65,7 @@ uv run python -m app.evaluation.diagnosis \
   --split validation \
   --concurrency 2 \
   --baseline /secure/eval-baselines/style-diagnosis-v0.1.json \
+  --expected-model candidate-diagnosis-model \
   --enforce-release-gates \
   --output /secure/eval-reports/style-diagnosis-v0.1-candidate.json
 ```
@@ -82,6 +86,8 @@ uv run python -m app.evaluation.optimization \
   --split validation \
   --concurrency 2 \
   --baseline /secure/eval-baselines/style-optimization-v0.1.json \
+  --expected-critic-model candidate-critic-model \
+  --expected-production-model candidate-image-model \
   --enforce-release-gates \
   --output /secure/eval-reports/style-optimization-v0.1-candidate.json
 ```
@@ -105,6 +111,10 @@ Critic First-pass、生产 P90、成本覆盖、拒绝结果误展示，以及�
 可通过 `--max-quality-drop`、`--max-latency-increase-percent` 和
 `--max-cost-increase-percent` 收紧门槛。放宽门槛必须作为发布变更接受评审，不能在
 失败后临时绕过。`--enforce-release-gates` 同时强制当前报告内所有 Release Gate 为真。
+
+Canary 运行还必须传 `--expected-model`、`--expected-critic-model` 或
+`--expected-production-model` 中与本次候选变更相关的参数。任一输出实际使用 fallback，
+或候选图片声明的 `production_image_model` 与待评模型不一致，均按失败关闭。
 
 进程退出码：
 

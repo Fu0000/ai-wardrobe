@@ -24,6 +24,10 @@ on:
         description: Candidate critic model; blank keeps the stable model
         required: false
         type: string
+      eval_bundle_sha256:
+        description: SHA-256 of the immutable private Eval ZIP; required unless rolling back to 0%
+        required: false
+        type: string
 
 concurrency:
   group: ai-wardrobe-staging
@@ -36,30 +40,18 @@ jobs:
   configure:
     name: Configure sticky AI cohort
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     environment: staging
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
-        with:
-          version: v1.35.0
-
-      - name: Configure cluster access
-        env:
-          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
-        run: |
-          test -n "$KUBECONFIG_B64"
-          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
-          chmod 600 "$RUNNER_TEMP/kubeconfig"
-          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
-
-      - name: Validate requested policy
+      - name: Validate requested policy and Eval reference
         env:
           PERCENTAGE: ${{ inputs.percentage }}
           DIAGNOSIS_MODEL: ${{ inputs.diagnosis_model }}
           IMAGE_MODEL: ${{ inputs.optimization_image_model }}
           CRITIC_MODEL: ${{ inputs.optimization_critic_model }}
+          EVAL_BUNDLE_SHA256: ${{ inputs.eval_bundle_sha256 }}
         run: |
           case "$PERCENTAGE" in
             0|10|50|100) ;;
@@ -73,11 +65,214 @@ jobs:
             exit 1
           fi
           for model in "$DIAGNOSIS_MODEL" "$IMAGE_MODEL" "$CRITIC_MODEL"; do
-            if [ "${#model}" -gt 160 ]; then
-              echo "model identifier is too long"
+            if [ -n "$model" ] \
+              && { [ "${#model}" -gt 160 ] \
+                || [[ ! "$model" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]]; }; then
+              echo "model identifier is invalid"
               exit 1
             fi
           done
+          if [ "$PERCENTAGE" != "0" ] \
+            && [[ ! "$EVAL_BUNDLE_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "a lowercase SHA-256 Eval bundle digest is required"
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        if: ${{ inputs.percentage != '0' }}
+        with:
+          version: "0.9.21"
+          enable-cache: true
+
+      - name: Install Eval runtime
+        if: ${{ inputs.percentage != '0' }}
+        working-directory: backend
+        run: |
+          uv python install 3.13
+          uv sync --frozen --no-dev
+
+      - name: Validate least-privilege Eval credentials
+        if: ${{ inputs.percentage != '0' }}
+        env:
+          EVAL_BUNDLE_URL: ${{ secrets.STAGING_AI_EVAL_BUNDLE_URL }}
+          AIW_OPENAI_API_KEY: ${{ secrets.STAGING_AI_EVAL_OPENAI_API_KEY }}
+          AIW_COS_BUCKET: ${{ secrets.STAGING_AI_EVAL_COS_BUCKET }}
+          AIW_COS_SECRET_ID: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_ID }}
+          AIW_COS_SECRET_KEY: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_KEY }}
+        run: |
+          test -n "$EVAL_BUNDLE_URL"
+          test -n "$AIW_OPENAI_API_KEY"
+          test -n "$AIW_COS_BUCKET"
+          test -n "$AIW_COS_SECRET_ID"
+          test -n "$AIW_COS_SECRET_KEY"
+
+      - name: Download and verify immutable Eval bundle
+        if: ${{ inputs.percentage != '0' }}
+        env:
+          EVAL_BUNDLE_URL: ${{ secrets.STAGING_AI_EVAL_BUNDLE_URL }}
+          EVAL_BUNDLE_SHA256: ${{ inputs.eval_bundle_sha256 }}
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --proto '=https' \
+            --proto-redir '=https' \
+            --max-filesize 10485760 \
+            --output "$RUNNER_TEMP/ai-eval-bundle.zip" \
+            "$EVAL_BUNDLE_URL"
+          chmod 600 "$RUNNER_TEMP/ai-eval-bundle.zip"
+          echo "$EVAL_BUNDLE_SHA256  $RUNNER_TEMP/ai-eval-bundle.zip" \
+            | sha256sum --check --strict
+
+      - name: Safely extract Eval bundle
+        id: extract
+        if: ${{ inputs.percentage != '0' }}
+        working-directory: backend
+        run: |
+          uv run --no-sync python scripts/eval_bundle.py \
+            --archive "$RUNNER_TEMP/ai-eval-bundle.zip" \
+            --output "$RUNNER_TEMP/private-evals"
+          mkdir -p "$RUNNER_TEMP/eval-reports"
+
+      - name: Run diagnosis quality gate
+        id: diagnosis_eval
+        if: >-
+          ${{
+            always() &&
+            inputs.percentage != '0' &&
+            inputs.diagnosis_model != '' &&
+            steps.extract.outcome == 'success'
+          }}
+        working-directory: backend
+        env:
+          AIW_ENVIRONMENT: staging
+          AIW_OPENAI_ENABLED: "true"
+          AIW_COS_ENABLED: "true"
+          AIW_OPENAI_API_KEY: ${{ secrets.STAGING_AI_EVAL_OPENAI_API_KEY }}
+          AIW_COS_BUCKET: ${{ secrets.STAGING_AI_EVAL_COS_BUCKET }}
+          AIW_COS_SECRET_ID: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_ID }}
+          AIW_COS_SECRET_KEY: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_KEY }}
+          PROVIDER_BASE_URL: ${{ secrets.STAGING_AI_EVAL_OPENAI_BASE_URL }}
+          COS_REGION: ${{ secrets.STAGING_AI_EVAL_COS_REGION }}
+          CANDIDATE_MODEL: ${{ inputs.diagnosis_model }}
+        run: |
+          export AIW_DIAGNOSIS_PRIMARY_MODEL="$CANDIDATE_MODEL"
+          if [ -n "$PROVIDER_BASE_URL" ]; then
+            export AIW_OPENAI_BASE_URL="$PROVIDER_BASE_URL"
+          fi
+          if [ -n "$COS_REGION" ]; then
+            export AIW_COS_REGION="$COS_REGION"
+          fi
+          uv run --no-sync python -m app.evaluation.diagnosis \
+            --manifest "$RUNNER_TEMP/private-evals/diagnosis/manifest.jsonl" \
+            --baseline "$RUNNER_TEMP/private-evals/diagnosis/baseline.json" \
+            --split validation \
+            --concurrency 2 \
+            --max-quality-drop 0.03 \
+            --max-latency-increase-percent 20 \
+            --max-cost-increase-percent 20 \
+            --expected-model "$CANDIDATE_MODEL" \
+            --enforce-release-gates \
+            --output "$RUNNER_TEMP/eval-reports/diagnosis.json"
+
+      - name: Run optimization quality gate
+        id: optimization_eval
+        if: >-
+          ${{
+            always() &&
+            inputs.percentage != '0' &&
+            (inputs.optimization_image_model != '' ||
+              inputs.optimization_critic_model != '') &&
+            steps.extract.outcome == 'success'
+          }}
+        working-directory: backend
+        env:
+          AIW_ENVIRONMENT: staging
+          AIW_OPENAI_ENABLED: "true"
+          AIW_COS_ENABLED: "true"
+          AIW_OPENAI_API_KEY: ${{ secrets.STAGING_AI_EVAL_OPENAI_API_KEY }}
+          AIW_COS_BUCKET: ${{ secrets.STAGING_AI_EVAL_COS_BUCKET }}
+          AIW_COS_SECRET_ID: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_ID }}
+          AIW_COS_SECRET_KEY: ${{ secrets.STAGING_AI_EVAL_COS_SECRET_KEY }}
+          PROVIDER_BASE_URL: ${{ secrets.STAGING_AI_EVAL_OPENAI_BASE_URL }}
+          COS_REGION: ${{ secrets.STAGING_AI_EVAL_COS_REGION }}
+          CANDIDATE_IMAGE_MODEL: ${{ inputs.optimization_image_model }}
+          CANDIDATE_CRITIC_MODEL: ${{ inputs.optimization_critic_model }}
+        run: |
+          critic_args=()
+          production_args=()
+          if [ -n "$CANDIDATE_CRITIC_MODEL" ]; then
+            export AIW_OPTIMIZATION_CRITIC_PRIMARY_MODEL="$CANDIDATE_CRITIC_MODEL"
+            critic_args=(--expected-critic-model "$CANDIDATE_CRITIC_MODEL")
+          fi
+          if [ -n "$CANDIDATE_IMAGE_MODEL" ]; then
+            production_args=(--expected-production-model "$CANDIDATE_IMAGE_MODEL")
+          fi
+          if [ -n "$PROVIDER_BASE_URL" ]; then
+            export AIW_OPENAI_BASE_URL="$PROVIDER_BASE_URL"
+          fi
+          if [ -n "$COS_REGION" ]; then
+            export AIW_COS_REGION="$COS_REGION"
+          fi
+          uv run --no-sync python -m app.evaluation.optimization \
+            --manifest "$RUNNER_TEMP/private-evals/optimization/manifest.jsonl" \
+            --baseline "$RUNNER_TEMP/private-evals/optimization/baseline.json" \
+            --split validation \
+            --concurrency 2 \
+            --max-quality-drop 0.03 \
+            --max-latency-increase-percent 20 \
+            --max-cost-increase-percent 20 \
+            "${critic_args[@]}" \
+            "${production_args[@]}" \
+            --enforce-release-gates \
+            --output "$RUNNER_TEMP/eval-reports/optimization.json"
+
+      - name: Upload Eval gate reports
+        if: ${{ always() && inputs.percentage != '0' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ai-eval-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/eval-reports
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Write Eval gate summary
+        if: ${{ always() && inputs.percentage != '0' }}
+        run: |
+          {
+            echo "## AI Eval quality gate"
+            echo
+            echo "- Bundle SHA-256: \`${{ inputs.eval_bundle_sha256 }}\`"
+            for report in diagnosis optimization; do
+              path="$RUNNER_TEMP/eval-reports/${report}.json"
+              if [ -f "$path" ]; then
+                status="$(jq -r '.command_gate.status // "UNKNOWN"' "$path")"
+                failures="$(jq -r '(.command_gate.failures // []) | join(", ")' "$path")"
+                echo "- ${report}: ${status}; failures: ${failures:-none}"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove private Eval inputs
+        if: ${{ always() && inputs.percentage != '0' }}
+        run: |
+          rm -f "$RUNNER_TEMP/ai-eval-bundle.zip"
+          rm -rf "$RUNNER_TEMP/private-evals"
+
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.35.0
+
+      - name: Configure cluster access
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
       - name: Capture previous policy
         run: |
@@ -169,6 +364,7 @@ jobs:
             echo
             echo "- Environment: staging"
             echo "- Sticky cohort: ${PERCENTAGE}%"
+            echo "- Offline Eval: required and passed before non-zero rollout"
             echo "- In-flight jobs: retain their persisted model policy snapshot"
             echo "- Next action: compare model-scoped quality, error, latency, and cost"
           } >> "$GITHUB_STEP_SUMMARY"
