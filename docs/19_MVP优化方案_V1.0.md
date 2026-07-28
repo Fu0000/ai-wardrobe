@@ -182,7 +182,7 @@
 
 - `tests/integration/conftest.py` 已提供事务回滚、真实 Database 与失败后强制清理 Fixture。
 - CI 已监听 `main`、`develop` 与 Pull Request，启动 PostgreSQL、Redis，并设置
-  `AIW_RUN_INTEGRATION_TESTS=1`；当前 23 个集成测试可实际执行。远端
+  `AIW_RUN_INTEGRATION_TESTS=1`；当前 24 个集成测试可实际执行。远端
   [CI #14](https://github.com/Fu0000/ai-wardrobe/actions/runs/30247845974) 的 Backend
   与 Miniapp Job 均已通过。
 - `DiagnosisExecutor` 已在真实 PostgreSQL 上覆盖有效租约不可抢占、Token Fencing 与重试
@@ -269,13 +269,24 @@ Retryable 转换和 `TIMED_OUT` 迟到 finalizer；另有结构约束测试防�
 
 ### ARCH-02 拆解 `OptimizationExecutor.run`
 
-**证据**：`backend/app/modules/optimization/executor.py:76-338`，单方法 263 行，最深处约 6 层缩进（`try` → `for` → `try` / `for` → `try` → `except`），末尾第 321 行为裸 `except Exception`。
+状态：**已完成。**
 
-**影响**：裸捕获把代码缺陷（如 `TypeError`）与瞬时故障同等处理，一律转为 `OPTIMIZATION_TEMPORARY_FAILURE` 重试并退配额，真实缺陷因此不可见。另有隐式不变量：`critic_response` 在第 253 行被引用，但绑定于第 195 行的内层循环，仅因 `critic_output is not None` 才成立，需读者自行重建推理。
+`OptimizationExecutor.run` 现只负责准备、网关生命周期与错误路由；生成尝试、图片验证、
+Critic 评审、结果持久化和质量拒绝分别进入独立方法。`CriticReview` 显式绑定通过 Schema
+校验的输出与模型版本，不再依赖内层循环变量在外层隐式存活。
 
-**方案**：随 ARCH-01 一并拆为「生成尝试」「Critic 评审」「结果落库」三个方法；收窄裸捕获范围，让非预期异常显式失败。
+已按故障域收窄异常语义：
 
-**约束**：`AGENTS.md` 与全局规约要求函数短小、超过三层缩进即设计错误。本条是该规约在仓库内最突出的偏离点。
+- Provider 终态拒绝、Provider 瞬时不可用、Critic 响应非法、存储不可用、图片处理失败和
+  数据库不可用各自使用明确错误码。
+- 无效生成图仍计入本次有界生成尝试，并进入质量报告，不误判为基础设施故障。
+- `TypeError` 等非预期编程异常先按当前执行 Token 终态失败并释放额度，随后原样抛出，
+  由 Worker/Trace 暴露真实缺陷；不再转为 `OPTIMIZATION_TEMPORARY_FAILURE`。
+- 关闭 Provider 放在统一 `finally`，所有已准备执行分支均释放客户端资源。
+
+新增 4 个单元测试，覆盖 Critic 先非法后合法时采用正确模型版本、连续两次非法响应、
+无效生成图报告，以及编程异常终态退款并显式失败。后端 Ruff、严格 Mypy、250 个
+单元/契约/真实 PostgreSQL/Redis 测试与 Alembic 模型漂移检查全部通过。
 
 ### ARCH-03 小程序抽取组件与 Composable
 
@@ -336,7 +347,8 @@ FIX-01、FIX-06 与 GATE-04 之间存在一条隐含主线：三者都指向「�
 - `docs/15` 第八节的埋点验收对每个 MVP 功能成立。
 - CI 中集成测试实际执行而非 skip。
 
-P2 条目不阻断封测，但必须在封测结束前完成 ARCH-01，否则 Executor 的安全关键逻辑将在四处继续无测试地发散。
+P2 条目不阻断封测；ARCH-01 与 ARCH-02 已完成，剩余架构债按封测期间的真实回归与维护
+成本继续排期。
 
 ## 九、明确不做
 
