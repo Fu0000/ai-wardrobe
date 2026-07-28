@@ -3,58 +3,49 @@
 install: backend-install frontend-install
 
 backend-install:
-	cd backend && uv sync --all-groups
+	./scripts/setup.sh backend
 
 frontend-install:
-	pnpm install --frozen-lockfile
+	./scripts/setup.sh frontend
 
 dev-api:
-	cd backend && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	./scripts/dev.sh api
 
 dev-miniapp:
-	pnpm dev:miniapp
+	./scripts/dev.sh miniapp
 
 worker:
-	cd backend && uv run celery -A app.worker.celery_app:celery_app worker -Q ai_fast,image_generation,media_generation,maintenance --loglevel=INFO
+	./scripts/dev.sh worker
 
 beat:
-	cd backend && uv run celery -A app.worker.celery_app:celery_app beat --loglevel=INFO
+	./scripts/dev.sh beat
 
 test:
-	cd backend && uv run pytest
-	pnpm test
+	./scripts/quality.sh test
 
 lint:
-	cd backend && uv run ruff check .
-	cd backend && uv run ruff format --check .
-	pnpm lint
+	./scripts/quality.sh lint
 
 typecheck:
-	cd backend && uv run mypy app tests scripts
-	pnpm typecheck
+	./scripts/quality.sh typecheck
 
 security-audit:
-	cd backend && uv export --frozen --no-dev --no-emit-project --format requirements-txt --quiet > /tmp/aiw-backend-requirements.txt
-	cd backend && uv run pip-audit --requirement /tmp/aiw-backend-requirements.txt --disable-pip
-	pnpm security:audit
+	./scripts/quality.sh security-audit
 
 build:
-	pnpm build
+	./scripts/quality.sh build
 
 infra-up:
-	docker compose --env-file .env -f infra/compose.yaml up -d
+	./scripts/infra.sh up
 
 infra-observability-up:
-	docker compose --env-file .env -f infra/compose.yaml --profile observability up -d
+	./scripts/infra.sh observability-up
 
 infra-down:
-	docker compose --env-file .env -f infra/compose.yaml down
+	./scripts/infra.sh down
 
 migrate:
-	cd backend && uv run alembic upgrade head
+	./scripts/infra.sh migrate
 
 staging-smoke:
-	test -n "$(STAGING_API_BASE_URL)"
-	test -n "$(SMOKE_IMAGE)"
-	test -n "$$AIW_SMOKE_ACCESS_TOKEN"
-	cd backend && uv run python scripts/smoke_mvp.py --base-url "$(STAGING_API_BASE_URL)" --image "$(SMOKE_IMAGE)"
+	STAGING_API_BASE_URL="$(STAGING_API_BASE_URL)" SMOKE_IMAGE="$(SMOKE_IMAGE)" ./scripts/staging-smoke.sh

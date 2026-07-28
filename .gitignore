@@ -25,3 +25,6 @@ miniapp/.env.production.local
 
 infra/performance/*.local.json
 infra/performance/results/
+
+logs/*
+!logs/.gitkeep
