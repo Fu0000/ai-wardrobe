@@ -30,6 +30,7 @@ cp .env.example .env
 make install
 make infra-up
 make migrate
+make terraform-staging-validate
 make local-db-drill
 ```
 
@@ -104,6 +105,10 @@ Makefile 只负责提供稳定命令名，实际执行统一进入 `scripts/*.sh
 
 `make docs-check` 校验编号文档版本、WBS 任务/状态汇总、P0 队列和关键架构术语；
 该检查与结构检查都在 CI 安装依赖前运行。
+
+`make terraform-staging-validate` 使用固定版本容器离线于云账号校验 Staging Terraform
+合同；实际 Plan/Apply 的远程状态、短期凭据、双人复核和销毁保护要求见
+`infra/terraform/staging/README.md`。
 
 供应链扫描对未批准的 High/Critical 漏洞失败；临时例外必须登记在
 `docs/18_供应链安全例外登记_V1.0.md`，包含影响边界、补偿控制、Owner

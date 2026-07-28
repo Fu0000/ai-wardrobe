@@ -451,10 +451,10 @@ API 创建业务记录与 OutboxEvent
 - 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
 - `DONE`：23 项。
 - `IN_REVIEW`：43 项。
-- `IN_PROGRESS`：8 项。
+- `IN_PROGRESS`：9 项。
 - `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
   研发评估的授权照片，无法执行真实全链路与质量基线。
-- `NOT_STARTED`：1 项。
+- `NOT_STARTED`：0 项。
 - 已验证：后端 Ruff、严格 Mypy、42 个 PostgreSQL/Redis 集成测试全量实际执行、
   十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
   Python 生产依赖 0 个已知漏洞；
@@ -548,6 +548,11 @@ API 创建业务记录与 OutboxEvent
   反馈入口、账号删除级联清理、小程序弱网草稿和隐私说明；实际 30～50 人名单与同意
   仍待产品侧落实。
 - W6 Beta Operations 证据：Wave 0～3 分批放量、测试者知情准入、每日观测、Bug 分诊、On-call RACI、事件响应、硬停止条件和用户通知模板已落地；具体名单、联系人、版本记录与实际发布待填写。
+- W6 INF-02 代码证据：Staging-only Terraform 根模块已锁定 Terraform 与腾讯云
+  Provider 版本，固化私有 VPC/应用与数据子网、API/DB/Redis 最小入口安全组、私有
+  KMS 加密 COS、精确 HTTPS CORS、上传/运行时 CAM Role 分权、销毁保护与远程状态
+  操作合同；CI 只执行无凭据 `init -backend=false` 与 Schema 校验。Managed
+  PostgreSQL/Redis/TKE、真实 Plan/Apply、云上连通性和成本复核仍待后续批次及审批。
 - W6 待验收：真实 COS 删除、Staging OTLP/Dashboard 与真实 On-call 告警送达、
   含数据备份恢复、Canary/回滚、真实 AI/队列容量与资源水位、COS Signed URL
   过期/权限及授权 Prompt Injection Eval、微信真机，以及 Go/No-Go 签署。
@@ -570,7 +575,7 @@ API 创建业务记录与 OutboxEvent
 | ENG-02 | 建立小程序工程骨架 | 前端 | 1.5d | W1 | PM-02 | Vue 3、TS strict、Pinia、基础路由可运行 | DONE |
 | ENG-03 | 建立配置与 Secret 管理 | 后端/DevOps | 1d | W1 | ENG-01 | 本地、Staging、Production 配置隔离 | DONE |
 | INF-01 | 本地 Docker 开发环境 | DevOps/后端 | 1.5d | W1 | ENG-01 | PostgreSQL、Redis 可重复启动 | DONE |
-| INF-02 | Staging 云资源和网络 | DevOps | 2d | W1 | ENG-03 | API、DB、Redis、COS 连通且最小权限 | NOT_STARTED |
+| INF-02 | Staging 云资源和网络 | DevOps | 2d | W1 | ENG-03 | API、DB、Redis、COS 连通且最小权限 | IN_PROGRESS |
 | INF-03 | CI Pipeline | DevOps | 1.5d | W1 | ENG-01、ENG-02 | PR 自动执行 Test、Lint、Type Check、Build | DONE |
 | INF-04 | OpenTelemetry、TraceID 和结构化日志 | DevOps/后端 | 2d | W1～W2 | INF-02 | API、Worker、Dispatcher 可按 TraceID 关联；托管日志后端留待 Staging 验收 | IN_REVIEW |
 | INF-05 | Staging 自动部署 | DevOps | 1.5d | W2 | INF-02、INF-03 | 主分支构建可部署到 Staging | IN_REVIEW |

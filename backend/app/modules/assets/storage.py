@@ -117,13 +117,22 @@ class DisabledObjectStorage:
 class TencentCosObjectStorage:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.cos_bucket
-        config = CosConfig(
+        runtime_config = CosConfig(
             Region=settings.cos_region,
             SecretId=settings.cos_secret_id.get_secret_value(),
             SecretKey=settings.cos_secret_key.get_secret_value(),
+            Token=settings.cos_security_token.get_secret_value() or None,
             Scheme="https",
         )
-        self._client = CosS3Client(config)
+        upload_config = CosConfig(
+            Region=settings.cos_region,
+            SecretId=settings.cos_upload_secret_id.get_secret_value(),
+            SecretKey=settings.cos_upload_secret_key.get_secret_value(),
+            Token=settings.cos_upload_security_token.get_secret_value() or None,
+            Scheme="https",
+        )
+        self._client = CosS3Client(runtime_config)
+        self._upload_client = CosS3Client(upload_config)
 
     async def check_health(self) -> object:
         def head_bucket() -> object:
@@ -143,7 +152,7 @@ class TencentCosObjectStorage:
     ) -> UploadAuthorization:
         def sign() -> str:
             try:
-                value: str = self._client.get_presigned_url(
+                value: str = self._upload_client.get_presigned_url(
                     Method="PUT",
                     Bucket=self.bucket,
                     Key=object_key,

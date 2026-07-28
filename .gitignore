@@ -26,5 +26,20 @@ miniapp/.env.production.local
 infra/performance/*.local.json
 infra/performance/results/
 
+# Terraform 运行目录、状态和部署计划包含云资源元数据，不得提交。
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+infra/terraform/**/config/*.local.hcl
+infra/terraform/**/config/*.local.tfvars
+
 logs/*
 !logs/.gitkeep

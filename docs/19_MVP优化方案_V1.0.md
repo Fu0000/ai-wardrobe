@@ -493,7 +493,7 @@ Critic 评审、结果持久化和质量拒绝分别进入独立方法。`Critic
 | 问题 | 落地结果 |
 |---|---|
 | 文件名与正文版本不符 | 正文为 V1.1 的 00～08 文档已统一重命名为 `_V1.1.md`，`AGENTS.md` 与 Agent 指引引用同步；后续要求文件名和标题同时升级 |
-| 任务数不符 | 复核证明旧结论是审计误报：WBS 实有 80 个唯一任务，状态为 DONE 20、IN_REVIEW 46、IN_PROGRESS 8、BLOCKED 5、NOT_STARTED 1，总和正好为 80，未删除或虚构任务 |
+| 任务数不符 | 复核证明旧结论是审计误报：WBS 实有 80 个唯一任务；初始校正快照为 DONE 20、IN_REVIEW 46、IN_PROGRESS 8、BLOCKED 5、NOT_STARTED 1，总和正好为 80，未删除或虚构任务。当前状态以 `docs/13` 的实施快照和自动汇总门禁为准 |
 | 队列名失同步 | P0 文档统一为 `ai_fast`、`image_generation`、`media_generation`、`maintenance`；`ingestion` 明确推迟到 P0.5 |
 | 抽象不存在 | 不再把 `OwnershipGuard` / `ScopedRepository` 当作已实现类名，统一描述代码真实执行的查询范围与关联归属双层校验 |
 | 任务名含未实现内容 | INF-04 改为 OpenTelemetry、TraceID 与结构化日志；托管日志后端及腾讯云 CLS 候选明确留待 INF-02 / Staging 真实验收 |

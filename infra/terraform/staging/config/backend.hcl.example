@@ -1,0 +1,16 @@
+# 仅作字段模板。实际值写入 backend.local.hcl，且不得提交。
+bucket = "replace-with-dedicated-terraform-state-bucket"
+key    = "ai-wardrobe/staging/terraform.tfstate"
+region = "ap-guangzhou"
+
+endpoints = {
+  s3 = "https://cos.ap-guangzhou.myqcloud.com"
+}
+
+use_path_style               = true
+use_lockfile                 = true
+skip_credentials_validation  = true
+skip_region_validation       = true
+skip_requesting_account_id   = true
+skip_metadata_api_check      = true
+skip_s3_checksum             = true

@@ -23,12 +23,15 @@ def production_settings(**overrides: object) -> Settings:
         "cos_bucket": "private-bucket",
         "cos_secret_id": "cos-secret-id",
         "cos_secret_key": "cos-secret-key",
+        "cos_upload_secret_id": "cos-upload-secret-id",
+        "cos_upload_secret_key": "cos-upload-secret-key",
         "openai_enabled": True,
         "openai_api_key": "openai-key",
         "rate_limit_enabled": True,
         "otel_enabled": True,
         "otel_exporter_otlp_endpoint": "http://otel-collector:4318",
         "trusted_proxy_cidrs": ["10.42.7.0/24"],
+        "cors_origins": ["https://staging.example.com"],
     }
     values.update(overrides)
     return Settings.model_validate(values)
@@ -165,3 +168,25 @@ def test_production_provider_endpoints_require_https(
 ) -> None:
     with pytest.raises(ValidationError, match=message):
         production_settings(**{field: value})
+
+
+def test_deployed_environment_requires_separate_cos_upload_credentials() -> None:
+    with pytest.raises(ValidationError, match="runtime/upload credentials"):
+        production_settings(cos_upload_secret_key="")
+
+
+def test_deployed_environment_rejects_reused_cos_identity() -> None:
+    with pytest.raises(ValidationError, match="identities must be different"):
+        production_settings(cos_upload_secret_id="cos-secret-id")
+
+
+def test_local_cos_configuration_also_requires_separate_identities() -> None:
+    with pytest.raises(ValidationError, match="identities must be different"):
+        Settings(
+            cos_enabled=True,
+            cos_bucket="private-bucket",
+            cos_secret_id="shared-secret-id",
+            cos_secret_key="runtime-secret-key",
+            cos_upload_secret_id="shared-secret-id",
+            cos_upload_secret_key="upload-secret-key",
+        )

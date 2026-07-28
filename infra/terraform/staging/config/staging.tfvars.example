@@ -1,0 +1,19 @@
+availability_zone = "ap-guangzhou-6"
+
+# 必须替换为真实入口/负载均衡所在的精确私网 CIDR，禁止 0.0.0.0/0。
+api_ingress_source_cidrs = ["10.32.0.0/20"]
+
+# 必须替换为微信配置与 Web 管理端实际使用的 HTTPS Origin，禁止 *。
+cos_allowed_origins = [
+  "https://servicewechat.com",
+  "https://staging.example.com",
+]
+
+# 两个既有 CAM Role 必须使用不同身份；这里只保存非敏感 Role ID。
+cos_upload_role_id  = "replace-with-upload-role-id"
+cos_runtime_role_id = "replace-with-runtime-role-id"
+
+extra_tags = {
+  cost_center = "mvp-closed-beta"
+  owner       = "platform"
+}

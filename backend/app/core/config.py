@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     cos_bucket: str = ""
     cos_secret_id: SecretStr = SecretStr("")
     cos_secret_key: SecretStr = SecretStr("")
+    cos_security_token: SecretStr = SecretStr("")
+    cos_upload_secret_id: SecretStr = SecretStr("")
+    cos_upload_secret_key: SecretStr = SecretStr("")
+    cos_upload_security_token: SecretStr = SecretStr("")
     cos_upload_ticket_ttl_seconds: int = Field(default=300, ge=60, le=900)
     cos_download_url_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
     max_upload_bytes: int = 20 * 1024 * 1024
@@ -210,6 +214,23 @@ class Settings(BaseSettings):
                 raise ValueError(f"invalid trusted proxy CIDR: {cidr}") from error
             if network.prefixlen == 0:
                 raise ValueError("trusted proxy CIDRs must not trust the entire address space")
+        if self.cos_enabled:
+            if (
+                not self.cos_bucket
+                or not self.cos_secret_id.get_secret_value()
+                or not self.cos_secret_key.get_secret_value()
+                or not self.cos_upload_secret_id.get_secret_value()
+                or not self.cos_upload_secret_key.get_secret_value()
+            ):
+                raise ValueError(
+                    "separate COS runtime/upload credentials and bucket are required "
+                    "when COS is enabled"
+                )
+            if (
+                self.cos_secret_id.get_secret_value()
+                == self.cos_upload_secret_id.get_secret_value()
+            ):
+                raise ValueError("COS runtime and upload identities must be different")
         if self.environment not in {"staging", "production"}:
             return self
 
@@ -255,12 +276,6 @@ class Settings(BaseSettings):
             raise ValueError("deployed OpenTelemetry requires an OTLP HTTP endpoint")
         if any(origin == "*" or not origin.startswith("https://") for origin in self.cors_origins):
             raise ValueError("deployed CORS origins must use explicit HTTPS origins")
-        if (
-            not self.cos_bucket
-            or not self.cos_secret_id.get_secret_value()
-            or not self.cos_secret_key.get_secret_value()
-        ):
-            raise ValueError("COS credentials and bucket are required in deployed environments")
         return self
 
 
