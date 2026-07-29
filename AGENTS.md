@@ -536,6 +536,17 @@ AI 质量：
 - 必须对比上一版本，不能只判断当前版本是否“看起来可用”。
 - 模型发布遵循 `Regression → Shadow → Human Review → 10% Canary → 50% → 100%`。
 
+### 微信开发者工具自动化
+
+可以使用 `weixin-devtools-mcp` 连接编译后的微信小程序产物进行页面、Console、截图和 AppService 验证。使用时必须遵守：
+
+- MCP 固定到已验证版本，不使用未审查的浮动 `latest`。
+- `projectPath` 指向 `miniapp/dist/build/mp-weixin` 的绝对路径；本地合法域名豁免只写入 Git 忽略的 `project.private.config.json`，不得改变生产域名校验。
+- 版本 `0.5.1` 的增强 Network 拦截在当前 uni-app 产物上可能改变 `wx.request` 回调，导致后端已返回 `200` 但页面仍停在加载态。功能验收时连接后立即调用 `stop_network_monitoring`；只有专门排查网络时才短暂开启，并用后端日志交叉验证。
+- 不得对携带认证信息的请求调用会返回完整 Headers/Body 的详情工具；网络列表只检查 URL、方法和成功状态。
+- `js_code`、Session Key、OpenID、Access Token 和 AppSecret 不得出现在 MCP 参数、返回值、截图、日志或测试报告中。AppService 脚本只返回布尔值、状态码和聚合结果。
+- 当前版本在复杂 uni-app 页面上可能出现元素快照或选择器阻塞。发生时优先使用 `get_current_page`、`evaluate_script`、`screenshot`、Console 和后端访问日志，不得把测试工具超时误判为业务失败。
+
 ## 16. 发布、迁移与回滚
 
 标准发布流程：
