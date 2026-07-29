@@ -1,4 +1,7 @@
-from app.core.logging import redact_sensitive_fields
+import logging
+
+from app.core.config import Settings
+from app.core.logging import configure_logging, redact_sensitive_fields
 
 
 def test_log_processor_redacts_nested_credentials_and_private_asset_references() -> None:
@@ -51,3 +54,10 @@ def test_log_processor_sanitizes_secrets_embedded_in_exception_text() -> None:
     assert "cHJpdmF0ZS1pbWFnZQ" not in rendered
     assert "eyJhbGciOiJIUzI1NiJ9" not in rendered
     assert "[REDACTED]" in rendered
+
+
+def test_logging_suppresses_third_party_request_urls_at_info_and_debug() -> None:
+    configure_logging(Settings(environment="test", log_level="DEBUG"))
+
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING

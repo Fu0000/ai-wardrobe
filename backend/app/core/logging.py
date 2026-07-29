@@ -44,6 +44,7 @@ _JWT_PATTERN = re.compile(
 )
 _QUERY_URL_PATTERN = re.compile(r"(?i)https?://[^\s\"']+\?[^\s\"']+")
 _IMAGE_DATA_PATTERN = re.compile(r"(?i)data:image/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=_-]+")
+_SENSITIVE_THIRD_PARTY_LOGGERS = ("httpx", "httpcore")
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -112,6 +113,11 @@ def configure_logging(settings: Settings) -> None:
         level=getattr(logging, settings.log_level),
         force=True,
     )
+    # HTTPX logs complete request URLs at INFO. Provider credentials can be
+    # carried in query parameters (for example WeChat code2Session), so these
+    # libraries must never inherit the application's INFO/DEBUG log level.
+    for logger_name in _SENSITIVE_THIRD_PARTY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
     structlog.configure(
         processors=[*shared_processors, renderer],
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.log_level)),
