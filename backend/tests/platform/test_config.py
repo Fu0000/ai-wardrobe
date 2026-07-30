@@ -250,6 +250,22 @@ def test_local_object_storage_rejects_broad_roots(root: str) -> None:
         )
 
 
+def test_local_ai_cannot_run_with_openai() -> None:
+    with pytest.raises(ValidationError, match="cannot be enabled together"):
+        Settings(
+            openai_enabled=True,
+            local_ai_enabled=True,
+        )
+
+
+def test_local_ai_is_restricted_to_non_deployed_environments() -> None:
+    with pytest.raises(ValidationError, match="restricted to local and test"):
+        production_settings(
+            openai_enabled=False,
+            local_ai_enabled=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

@@ -10,12 +10,19 @@ from app.core.config import Settings
 from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.ai.contracts import (
+    ClosableProvider,
+    ImageEditProvider,
     ImageEditRequest,
     ProviderErrorCode,
+    StructuredVisionProvider,
     StructuredVisionRequest,
     TaskPolicy,
 )
 from app.modules.ai.gateway import AIGateway, AllProvidersFailedError
+from app.modules.ai.local_provider import (
+    LocalImageEditProvider,
+    LocalStructuredVisionProvider,
+)
 from app.modules.ai.openai_image_provider import OpenAIImageEditProvider
 from app.modules.ai.openai_provider import OpenAIStructuredVisionProvider
 from app.modules.ai.policies import (
@@ -106,8 +113,8 @@ class CriticReview:
 class OptimizationGateways:
     image: AIGateway
     critic: AIGateway
-    image_provider: OpenAIImageEditProvider | None
-    critic_provider: OpenAIStructuredVisionProvider | None
+    image_provider: ClosableProvider | None
+    critic_provider: ClosableProvider | None
 
     async def close(self) -> None:
         if self.image_provider is not None:
@@ -189,23 +196,34 @@ class OptimizationExecutor:
             await gateways.close()
 
     def _gateways(self) -> OptimizationGateways:
-        image_provider: OpenAIImageEditProvider | None = None
-        critic_provider: OpenAIStructuredVisionProvider | None = None
-        image_providers: tuple[OpenAIImageEditProvider, ...] = ()
-        critic_providers: tuple[OpenAIStructuredVisionProvider, ...] = ()
-        if self._settings.openai_enabled:
+        image_provider: ClosableProvider | None = None
+        critic_provider: ClosableProvider | None = None
+        image_providers: tuple[ImageEditProvider, ...] = ()
+        critic_providers: tuple[StructuredVisionProvider, ...] = ()
+        if self._settings.local_ai_enabled:
+            local_image_provider = LocalImageEditProvider(
+                max_output_bytes=self._settings.max_upload_bytes,
+            )
+            local_critic_provider = LocalStructuredVisionProvider()
+            image_provider = local_image_provider
+            critic_provider = local_critic_provider
+            image_providers = (local_image_provider,)
+            critic_providers = (local_critic_provider,)
+        elif self._settings.openai_enabled:
             api_key = self._settings.openai_api_key.get_secret_value()
-            image_provider = OpenAIImageEditProvider(
+            openai_image_provider = OpenAIImageEditProvider(
                 api_key=api_key,
                 base_url=self._settings.openai_base_url,
                 max_output_bytes=self._settings.max_upload_bytes,
             )
-            critic_provider = OpenAIStructuredVisionProvider(
+            openai_critic_provider = OpenAIStructuredVisionProvider(
                 api_key=api_key,
                 base_url=self._settings.openai_base_url,
             )
-            image_providers = (image_provider,)
-            critic_providers = (critic_provider,)
+            image_provider = openai_image_provider
+            critic_provider = openai_critic_provider
+            image_providers = (openai_image_provider,)
+            critic_providers = (openai_critic_provider,)
         return OptimizationGateways(
             image=AIGateway(image_edit_providers=image_providers),
             critic=AIGateway(structured_vision_providers=critic_providers),

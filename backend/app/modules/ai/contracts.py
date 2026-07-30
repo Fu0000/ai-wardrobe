@@ -125,3 +125,7 @@ class ImageEditProvider(Protocol):
         timeout_seconds: float,
         cost_ceiling_microunits: int,
     ) -> ImageEditResponse: ...
+
+
+class ClosableProvider(Protocol):
+    async def close(self) -> None: ...

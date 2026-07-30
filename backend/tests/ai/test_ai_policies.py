@@ -69,3 +69,42 @@ def test_optimization_snapshot_keeps_legacy_attempt_count_compatible() -> None:
     assert image.routes[0].provider == "openai-image"
     assert critic.routes[0].provider == "openai"
     assert attempts == 2
+
+
+def test_local_ai_policies_use_only_local_demo_providers() -> None:
+    settings = Settings(environment="test", local_ai_enabled=True)
+
+    diagnosis = diagnosis_policy(settings)
+    image = optimization_image_policy(settings)
+    critic = optimization_critic_policy(settings)
+
+    assert [(route.provider, route.model) for route in diagnosis.routes] == [
+        ("local-demo", "local-demo-diagnosis-v1")
+    ]
+    assert [(route.provider, route.model) for route in image.routes] == [
+        ("local-demo-image", "local-demo-image-v1")
+    ]
+    assert [(route.provider, route.model) for route in critic.routes] == [
+        ("local-demo", "local-demo-critic-v1")
+    ]
+
+
+def test_local_ai_policy_snapshots_remain_valid_after_runtime_switch() -> None:
+    local_settings = Settings(environment="test", local_ai_enabled=True)
+    deployed_settings = Settings(environment="test")
+
+    diagnosis = diagnosis_job_policy(
+        deployed_settings,
+        policy_snapshot(diagnosis_policy(local_settings)),
+    )
+    image, critic, _ = optimization_job_policies(
+        deployed_settings,
+        {
+            "image_edit": policy_snapshot(optimization_image_policy(local_settings)),
+            "critic": policy_snapshot(optimization_critic_policy(local_settings)),
+        },
+    )
+
+    assert diagnosis.routes[0].provider == "local-demo"
+    assert image.routes[0].provider == "local-demo-image"
+    assert critic.routes[0].provider == "local-demo"

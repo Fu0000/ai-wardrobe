@@ -7,10 +7,13 @@ from app.core.config import Settings
 from app.core.telemetry import current_trace_fields
 from app.database.session import Database
 from app.modules.ai.contracts import (
+    ClosableProvider,
     ProviderErrorCode,
+    StructuredVisionProvider,
     StructuredVisionRequest,
 )
 from app.modules.ai.gateway import AIGateway, AllProvidersFailedError
+from app.modules.ai.local_provider import LocalStructuredVisionProvider
 from app.modules.ai.openai_provider import OpenAIStructuredVisionProvider
 from app.modules.ai.policies import (
     PolicySnapshotError,
@@ -72,9 +75,13 @@ class DiagnosisExecutor:
         if prepared is None:
             return "SKIPPED"
 
-        provider: OpenAIStructuredVisionProvider | None = None
-        providers: tuple[OpenAIStructuredVisionProvider, ...] = ()
-        if self._settings.openai_enabled:
+        provider: ClosableProvider | None = None
+        providers: tuple[StructuredVisionProvider, ...] = ()
+        if self._settings.local_ai_enabled:
+            local_provider = LocalStructuredVisionProvider()
+            provider = local_provider
+            providers = (local_provider,)
+        elif self._settings.openai_enabled:
             provider = OpenAIStructuredVisionProvider(
                 api_key=self._settings.openai_api_key.get_secret_value(),
                 base_url=self._settings.openai_base_url,

@@ -3,6 +3,13 @@ from collections.abc import Mapping
 
 from app.core.config import Settings
 from app.modules.ai.contracts import ModelRoute, TaskPolicy
+from app.modules.ai.local_provider import (
+    LOCAL_CRITIC_MODEL,
+    LOCAL_DIAGNOSIS_MODEL,
+    LOCAL_IMAGE_MODEL,
+    LOCAL_IMAGE_PROVIDER_NAME,
+    LOCAL_STRUCTURED_PROVIDER_NAME,
+)
 
 
 class PolicySnapshotError(Exception):
@@ -24,6 +31,18 @@ def diagnosis_policy(
     *,
     use_canary: bool = False,
 ) -> TaskPolicy:
+    if settings.local_ai_enabled:
+        return TaskPolicy(
+            routes=(
+                ModelRoute(
+                    provider=LOCAL_STRUCTURED_PROVIDER_NAME,
+                    model=LOCAL_DIAGNOSIS_MODEL,
+                ),
+            ),
+            timeout_seconds=settings.diagnosis_timeout_seconds,
+            cost_ceiling_microunits=settings.diagnosis_cost_ceiling_microunits,
+            quality_threshold=0.8,
+        )
     primary_model = (
         settings.diagnosis_canary_model
         if use_canary and settings.diagnosis_canary_model
@@ -45,6 +64,18 @@ def optimization_image_policy(
     *,
     use_canary: bool = False,
 ) -> TaskPolicy:
+    if settings.local_ai_enabled:
+        return TaskPolicy(
+            routes=(
+                ModelRoute(
+                    provider=LOCAL_IMAGE_PROVIDER_NAME,
+                    model=LOCAL_IMAGE_MODEL,
+                ),
+            ),
+            timeout_seconds=settings.optimization_image_timeout_seconds,
+            cost_ceiling_microunits=settings.optimization_image_cost_ceiling_microunits,
+            quality_threshold=0.8,
+        )
     model = (
         settings.optimization_image_canary_model
         if use_canary and settings.optimization_image_canary_model
@@ -63,6 +94,18 @@ def optimization_critic_policy(
     *,
     use_canary: bool = False,
 ) -> TaskPolicy:
+    if settings.local_ai_enabled:
+        return TaskPolicy(
+            routes=(
+                ModelRoute(
+                    provider=LOCAL_STRUCTURED_PROVIDER_NAME,
+                    model=LOCAL_CRITIC_MODEL,
+                ),
+            ),
+            timeout_seconds=settings.optimization_critic_timeout_seconds,
+            cost_ceiling_microunits=settings.optimization_critic_cost_ceiling_microunits,
+            quality_threshold=0.8,
+        )
     primary_model = (
         settings.optimization_critic_canary_model
         if use_canary and settings.optimization_critic_canary_model
@@ -161,7 +204,7 @@ def diagnosis_job_policy(
     return policy_from_snapshot(
         snapshot,
         fallback=diagnosis_policy(settings),
-        allowed_providers=frozenset({"openai"}),
+        allowed_providers=frozenset({"openai", LOCAL_STRUCTURED_PROVIDER_NAME}),
         max_routes=2,
     )
 
@@ -190,13 +233,13 @@ def optimization_job_policies(
     image_policy = policy_from_snapshot(
         snapshot.get("image_edit"),
         fallback=optimization_image_policy(settings),
-        allowed_providers=frozenset({"openai-image"}),
+        allowed_providers=frozenset({"openai-image", LOCAL_IMAGE_PROVIDER_NAME}),
         max_routes=1,
     )
     critic_policy = policy_from_snapshot(
         snapshot.get("critic"),
         fallback=optimization_critic_policy(settings),
-        allowed_providers=frozenset({"openai"}),
+        allowed_providers=frozenset({"openai", LOCAL_STRUCTURED_PROVIDER_NAME}),
         max_routes=2,
     )
     return image_policy, critic_policy, attempts
