@@ -36,6 +36,8 @@ def production_settings(**overrides: object) -> Settings:
         ),
         "openai_enabled": True,
         "openai_api_key": "openai-key",
+        "local_ai_enabled": False,
+        "local_storage_enabled": False,
         "rate_limit_enabled": True,
         "otel_enabled": True,
         "otel_exporter_otlp_endpoint": "http://otel-collector:4318",
@@ -250,12 +252,15 @@ def test_local_object_storage_rejects_broad_roots(root: str) -> None:
         )
 
 
-def test_local_ai_cannot_run_with_openai() -> None:
-    with pytest.raises(ValidationError, match="cannot be enabled together"):
-        Settings(
-            openai_enabled=True,
-            local_ai_enabled=True,
-        )
+def test_local_ai_can_backstop_openai_in_local_environment() -> None:
+    settings = Settings(
+        environment="test",
+        openai_enabled=True,
+        local_ai_enabled=True,
+    )
+
+    assert settings.openai_enabled is True
+    assert settings.local_ai_enabled is True
 
 
 def test_local_ai_is_restricted_to_non_deployed_environments() -> None:

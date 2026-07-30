@@ -8,7 +8,12 @@ run_tests() {
   aiw_require_command uv
   aiw_require_command pnpm
   cd "${AIW_REPO_ROOT}/backend"
-  uv run pytest
+  # 本地联调可能启用付费 AI 和私有图片存储；质量测试必须使用隔离配置，
+  # 不能读取开发者 .env 后误发外部请求或依赖遗留对象。
+  AIW_OPENAI_ENABLED=false \
+    AIW_LOCAL_AI_ENABLED=false \
+    AIW_LOCAL_STORAGE_ENABLED=false \
+    uv run pytest
   cd "${AIW_REPO_ROOT}"
   pnpm test
 }

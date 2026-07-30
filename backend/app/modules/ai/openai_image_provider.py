@@ -136,6 +136,7 @@ class OpenAIImageEditProvider:
                 prompt=request.prompt,
                 size=output_size,
                 quality="medium",
+                response_format="b64_json",
                 output_format="jpeg",
                 output_compression=88,
                 background="opaque",

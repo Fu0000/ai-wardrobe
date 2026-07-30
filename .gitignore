@@ -46,3 +46,6 @@ logs/*
 
 # 仅供本地联调的私有对象存储，可能包含用户照片和派生图片。
 .local/
+
+# Celery Beat 本地调度状态；由运行时自动生成，不属于项目源代码。
+backend/celerybeat-schedule*

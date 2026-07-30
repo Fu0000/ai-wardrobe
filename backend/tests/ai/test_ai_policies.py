@@ -72,7 +72,11 @@ def test_optimization_snapshot_keeps_legacy_attempt_count_compatible() -> None:
 
 
 def test_local_ai_policies_use_only_local_demo_providers() -> None:
-    settings = Settings(environment="test", local_ai_enabled=True)
+    settings = Settings(
+        environment="test",
+        openai_enabled=False,
+        local_ai_enabled=True,
+    )
 
     diagnosis = diagnosis_policy(settings)
     image = optimization_image_policy(settings)
@@ -90,8 +94,16 @@ def test_local_ai_policies_use_only_local_demo_providers() -> None:
 
 
 def test_local_ai_policy_snapshots_remain_valid_after_runtime_switch() -> None:
-    local_settings = Settings(environment="test", local_ai_enabled=True)
-    deployed_settings = Settings(environment="test")
+    local_settings = Settings(
+        environment="test",
+        openai_enabled=False,
+        local_ai_enabled=True,
+    )
+    deployed_settings = Settings(
+        environment="test",
+        openai_enabled=False,
+        local_ai_enabled=False,
+    )
 
     diagnosis = diagnosis_job_policy(
         deployed_settings,
@@ -108,3 +120,19 @@ def test_local_ai_policy_snapshots_remain_valid_after_runtime_switch() -> None:
     assert diagnosis.routes[0].provider == "local-demo"
     assert image.routes[0].provider == "local-demo-image"
     assert critic.routes[0].provider == "local-demo"
+
+
+def test_local_ai_is_an_explicit_fallback_for_openai_image_generation() -> None:
+    settings = Settings(
+        environment="test",
+        openai_enabled=True,
+        local_ai_enabled=True,
+        optimization_image_model="dated-image-model",
+    )
+
+    image = optimization_image_policy(settings)
+
+    assert [(route.provider, route.model) for route in image.routes] == [
+        ("openai-image", "dated-image-model"),
+        ("local-demo-image", "local-demo-image-v1"),
+    ]

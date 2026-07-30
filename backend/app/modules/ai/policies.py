@@ -64,25 +64,35 @@ def optimization_image_policy(
     *,
     use_canary: bool = False,
 ) -> TaskPolicy:
+    routes: list[ModelRoute] = []
+    if settings.openai_enabled:
+        model = (
+            settings.optimization_image_canary_model
+            if use_canary and settings.optimization_image_canary_model
+            else settings.optimization_image_model
+        )
+        routes.append(ModelRoute(provider="openai-image", model=model))
     if settings.local_ai_enabled:
+        routes.append(
+            ModelRoute(
+                provider=LOCAL_IMAGE_PROVIDER_NAME,
+                model=LOCAL_IMAGE_MODEL,
+            )
+        )
+    if routes:
         return TaskPolicy(
-            routes=(
-                ModelRoute(
-                    provider=LOCAL_IMAGE_PROVIDER_NAME,
-                    model=LOCAL_IMAGE_MODEL,
-                ),
-            ),
+            routes=tuple(routes),
             timeout_seconds=settings.optimization_image_timeout_seconds,
             cost_ceiling_microunits=settings.optimization_image_cost_ceiling_microunits,
             quality_threshold=0.8,
         )
-    model = (
-        settings.optimization_image_canary_model
-        if use_canary and settings.optimization_image_canary_model
-        else settings.optimization_image_model
-    )
     return TaskPolicy(
-        routes=(ModelRoute(provider="openai-image", model=model),),
+        routes=(
+            ModelRoute(
+                provider="openai-image",
+                model=settings.optimization_image_model,
+            ),
+        ),
         timeout_seconds=settings.optimization_image_timeout_seconds,
         cost_ceiling_microunits=settings.optimization_image_cost_ceiling_microunits,
         quality_threshold=0.8,
@@ -234,7 +244,7 @@ def optimization_job_policies(
         snapshot.get("image_edit"),
         fallback=optimization_image_policy(settings),
         allowed_providers=frozenset({"openai-image", LOCAL_IMAGE_PROVIDER_NAME}),
-        max_routes=1,
+        max_routes=2,
     )
     critic_policy = policy_from_snapshot(
         snapshot.get("critic"),

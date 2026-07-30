@@ -1,6 +1,11 @@
+import base64
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
+from app.modules.ai.contracts import ImageEditRequest
 from app.modules.ai.openai_image_provider import (
+    OpenAIImageEditProvider,
     estimate_image_edit_cost,
     normalized_image_output_size,
 )
@@ -42,3 +47,31 @@ def test_gpt_image_output_size_meets_provider_constraints(
 def test_gpt_image_output_size_rejects_panorama() -> None:
     with pytest.raises(ValueError, match="aspect ratio"):
         normalized_image_output_size(400, 1_601)
+
+
+async def test_image_edit_requests_base64_output_for_compatible_gateways() -> None:
+    provider = object.__new__(OpenAIImageEditProvider)
+    provider._max_output_bytes = 1024
+    provider._client = MagicMock()
+    provider._client.images.edit = AsyncMock(
+        return_value=MagicMock(
+            data=[MagicMock(b64_json=base64.b64encode(b"jpeg-result").decode())],
+            usage=None,
+        )
+    )
+
+    response = await provider.edit(
+        model="dated-image-model",
+        request=ImageEditRequest(
+            source_image=b"png-source",
+            source_content_type="image/png",
+            source_width=512,
+            source_height=512,
+            prompt="minimal edit",
+        ),
+        timeout_seconds=10,
+        cost_ceiling_microunits=100_000,
+    )
+
+    assert response.image_bytes == b"jpeg-result"
+    assert provider._client.images.edit.await_args.kwargs["response_format"] == "b64_json"

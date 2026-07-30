@@ -256,8 +256,6 @@ class Settings(BaseSettings):
             storage_root = Path(self.local_storage_root).expanduser().resolve()
             if storage_root == Path(storage_root.anchor) or storage_root == Path.home().resolve():
                 raise ValueError("local object storage root must be a dedicated directory")
-        if self.openai_enabled and self.local_ai_enabled:
-            raise ValueError("OpenAI and local AI cannot be enabled together")
         if self.local_ai_enabled and self.environment not in {"local", "test"}:
             raise ValueError("local AI is restricted to local and test environments")
         if self.environment not in {"staging", "production"}:
