@@ -446,14 +446,15 @@ API 创建业务记录与 OutboxEvent
 
 代码实现已启动。以下状态以验证证据为准；Owner 当前仍填写建议角色，进入团队协作时必须落实到具体人员。
 
-当前实施快照（2026-07-28）：
+当前实施快照（2026-07-30）：
 
-- 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；Staging、真实 COS/微信/OpenAI、质量数据与真机验收仍待补齐。
+- 当前阶段：P0b / W6，隐私删除、孤儿上传清理、依赖感知就绪探针与可观测性已通过本地实库和容器验证；本地私有对象存储与混合 AI 路由已完成开发闭环验收，Staging、真实 COS、远程图片模型映射、质量数据与真机验收仍待补齐。
 - `DONE`：23 项。
 - `IN_REVIEW`：43 项。
 - `IN_PROGRESS`：9 项。
-- `BLOCKED`：5 项，尚未提供 Staging/COS/微信应用凭据和 50+ 张可用于诊断与优化
-  研发评估的授权照片，无法执行真实全链路与质量基线。
+- `BLOCKED`：5 项，尚未提供 Staging/COS 资源和 50+ 张可用于诊断与优化研发评估的
+  授权照片；当前 OpenAI-compatible 端点也尚未映射精确图片模型
+  `gpt-image-2-2026-04-21`，无法执行真实远程图片全链路与质量基线。
 - `NOT_STARTED`：0 项。
 - 已验证：后端 Ruff、严格 Mypy、42 个 PostgreSQL/Redis 集成测试全量实际执行、
   十版 Alembic 空库升级/回滚/模型漂移与离线 SQL、
@@ -463,6 +464,15 @@ API 创建业务记录与 OutboxEvent
 - Docker 证据：独立 Compose 项目使用全新卷连续启动两次均健康；空库迁移和 42 个集成
   测试在 Compose 服务上通过；生产镜像以 UID/GID 10001 在只读根文件系统启动，内置
   Liveness 与 PostgreSQL/Redis Readiness 均通过。
+- 本地 MVP 全链路证据：本地私有对象存储保留签名 PUT/GET、路径隔离、原子写入和
+  Readiness 语义；同一用户完成授权、上传、Asset Complete、Diagnosis、
+  Optimization、Share、Vote 与删除闭包。完整冒烟最终为 `PASSED`，数据清理为
+  `COMPLETED`；微信开发者工具已验收 82 分诊断页和通过一致性检查的 Before/After
+  结果页。
+- 本地 AI 路由证据：Diagnosis 与 Critic 使用带明确 `local-demo` 标识的确定性适配器；
+  Optimization 首次真实请求 `gpt-image-2-2026-04-21`，上游返回模型不可用后记录
+  `FAILED/UNAVAILABLE`，随后第 2 路本地图片适配器成功。该结果只证明路由、回退、
+  持久化和 UI 闭环，不计入真实模型效果、成本或延迟基线。
 - 远端 CI 证据：GitHub Actions
   [CI run 30350191465](https://github.com/Fu0000/ai-wardrobe/actions/runs/30350191465)
   在 `develop@a031018` 上完成，Backend 与 Miniapp Job 均为 `success`。
@@ -470,7 +480,8 @@ API 创建业务记录与 OutboxEvent
   Reserve/Commit/Release、OpenAI Responses Structured Output、主备模型、
   AIInvocation、四类 Worker 共用的带令牌执行租约骨架、退避轮询、任务恢复、
   输入质量失败和诊断结果页。
-- W3 待验收：真实 PostgreSQL/Redis/Celery/COS/OpenAI 全链路、微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线。
+- W3 待验收：本地 PostgreSQL/Redis/Celery 已完成真实全链路；真实 COS/OpenAI、
+  微信低端安卓真机、50+ 授权样本 Eval 和 P90/P95/成本基线仍待验收。
 - AI Eval 回归门禁代码证据：诊断与优化 Runner 已支持固定样本/数据集版本比较、
   质量绝对降幅、Schema 零退化、P95 延迟和平均成本相对涨幅阈值，并在失败时落盘报告
   后返回非零退出码；AI Canary 非零放量已以前置 Eval 为硬门禁，并校验实际候选模型。
@@ -486,7 +497,9 @@ API 创建业务记录与 OutboxEvent
   loading / error / empty 状态、进度条、主操作与隐私提示已抽为共享组件；
   Diagnosis / Optimization / Share 的任务资源恢复已统一到 Job-backed Store 工厂；
   最大源码文件为 789 行。
-- W4 待验收：真实 COS/OpenAI 图片编辑与 Critic 联调、50+ 授权 Before/After 样本、双人盲评、Critic First-pass、P90 和单位成本基线、微信真机保存图片。
+- W4 待验收：本地图片回退与 Critic 已完成链路验收；真实 COS/OpenAI 图片编辑与
+  Critic 联调、50+ 授权 Before/After 样本、双人盲评、Critic First-pass、P90 和
+  单位成本基线、微信真机保存图片仍待验收。
 - W5 Growth 代码证据：独立 Share Derivative、EXIF 清理、AI 编辑标识、分享确认页、
   SceneCode、好友落地页与二次转发、好友/朋友圈渠道链接、HMAC 防重复投票、可改票
   不重复计数、好友侧任务信息隔离，以及 Share Invoked/Open/Vote/Continue 去重归因事件。

@@ -34,7 +34,10 @@
 
 - 后端保持 Public Service → Domain → Infrastructure 单向依赖。
 - 前端区分 Server State 与 UI State，后台任务必须可离页恢复。
-- 图片继续直传私有 COS，分享只使用独立派生资产。
+- Staging/Production 图片继续直传私有 COS，分享只使用独立派生资产；`local`/`test`
+  可启用保持同一 Upload Ticket 契约的本地私有对象存储适配器。
+- 本地 AI 适配器只能用于开发演示和故障路径验证，结果必须记录实际
+  Provider/Model，不能计入真实模型质量或发布 Gate。
 - 写操作必须有鉴权、所有权、幂等、限流和安全失败文案。
 - 数据删除覆盖原图、派生图、数据库、缓存和 Provider 临时数据。
 - 不得记录敏感用户标识、访问 Token、私有 URL 或图片正文。

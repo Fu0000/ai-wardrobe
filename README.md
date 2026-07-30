@@ -48,7 +48,38 @@ GET http://localhost:8000/health/live
 GET http://localhost:8000/health/ready
 ```
 
-`live` 只判断进程存活；`ready` 会检查 PostgreSQL、Redis，并在启用 COS 时检查 Bucket。依赖异常时返回 503，供负载均衡摘流。
+`live` 只判断进程存活；`ready` 会检查 PostgreSQL、Redis，以及当前启用的 COS 或本地私有对象存储。依赖异常时返回 503，供负载均衡摘流。
+
+## 本地完整链路演示
+
+本地开发可以保留 Upload Ticket、私有对象、异步 Job、模型路由和删除闭包等生产语义，同时把 COS 降级为磁盘目录，并在远程图片模型不可用时使用确定性本地图片适配器：
+
+```text
+AIW_COS_ENABLED=false
+AIW_LOCAL_STORAGE_ENABLED=true
+AIW_LOCAL_STORAGE_ROOT=../.local/object-storage
+AIW_LOCAL_STORAGE_BASE_URL=http://localhost:8000
+
+AIW_OPENAI_ENABLED=true
+AIW_OPENAI_BASE_URL=<OpenAI-compatible /v1 endpoint>
+AIW_OPTIMIZATION_IMAGE_MODEL=gpt-image-2-2026-04-21
+AIW_LOCAL_AI_ENABLED=true
+```
+
+`AIW_LOCAL_AI_ENABLED=true` 时，诊断和 Critic 使用本地确定性适配器；图片优化先请求配置的精确远程模型，远程失败后才走本地图片回退。执行结果会记录实际 Provider/Model，不能把本地回退当作真实模型质量证据。若只需要完全离线演示，可同时设置 `AIW_OPENAI_ENABLED=false`。
+
+依次启动基础设施、迁移、API、Worker、Beat 和小程序开发构建：
+
+```bash
+make infra-up
+make migrate
+make dev-api
+make worker
+make beat
+make dev-miniapp
+```
+
+这些适配器只允许 `local`/`test` 环境；Staging/Production 启动校验会拒绝本地存储或本地 AI。凭据只写入被 Git 忽略的 `.env`，小程序本地合法域名豁免只写入 `project.private.config.json`，两者都不得提交。
 
 ## 本地可观测性
 
@@ -82,6 +113,8 @@ unset AIW_SMOKE_ACCESS_TOKEN
 ```
 
 访问令牌只通过环境变量传入，不会进入命令行参数或报告。脚本默认删除本次生成的原图和全部派生数据，并输出 Request ID、Trace ID、状态码与耗时证据；仅在受控人工检查时使用 `--keep-data`。
+
+同一脚本也接受 `http://localhost`，并会主动绕过系统代理，适合验证本地上传 → 诊断 → 优化 → 分享 → 投票 → 删除闭环。
 
 ## 质量检查
 

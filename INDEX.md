@@ -24,6 +24,7 @@
 - 基础设施与部署：`infra/`
 - 工程脚本：`scripts/`
 - GitHub Actions：`.github/workflows/`
+- 本地完整链路、存储与 AI 回退说明：`README.md` 的“本地完整链路演示”
 
 ## 按需查阅
 
