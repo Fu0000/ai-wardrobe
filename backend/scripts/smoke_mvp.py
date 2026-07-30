@@ -19,10 +19,16 @@ TERMINAL_JOB_STATUSES = {
     "TIMED_OUT",
     "CANCELLED",
 }
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class SmokeError(Exception):
     pass
+
+
+def should_trust_environment(url: str) -> bool:
+    """Keep staging proxy support while ensuring local smoke traffic stays local."""
+    return urlparse(url).hostname not in LOCAL_HOSTS
 
 
 class SmokeClient:
@@ -35,6 +41,7 @@ class SmokeClient:
             },
             timeout=httpx.Timeout(30),
             follow_redirects=False,
+            trust_env=should_trust_environment(base_url),
         )
         self._timeout_seconds = timeout_seconds
         self.evidence: list[dict[str, object]] = []
@@ -227,9 +234,13 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
         }
         image_bytes = await asyncio.to_thread(image_path.read_bytes)
         upload_started_at = monotonic()
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60)) as upload_client:
+        upload_url = str(ticket["upload_url"])
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(60),
+            trust_env=should_trust_environment(upload_url),
+        ) as upload_client:
             upload_response = await upload_client.put(
-                str(ticket["upload_url"]),
+                upload_url,
                 content=image_bytes,
                 headers=upload_headers,
             )
