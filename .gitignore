@@ -43,3 +43,6 @@ infra/terraform/**/config/*.local.tfvars
 
 logs/*
 !logs/.gitkeep
+
+# 仅供本地联调的私有对象存储，可能包含用户照片和派生图片。
+.local/

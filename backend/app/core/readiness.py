@@ -58,7 +58,7 @@ class ReadinessChecker:
             "redis": self._check_redis,
         }
         dependencies: dict[str, DependencyState] = {}
-        if self._settings.cos_enabled:
+        if self._settings.cos_enabled or self._settings.local_storage_enabled:
             checks["object_storage"] = self._check_object_storage
         else:
             dependencies["object_storage"] = "disabled"

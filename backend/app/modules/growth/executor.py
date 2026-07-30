@@ -285,7 +285,7 @@ class ShareAssetExecutor:
             await AssetRepository(session).create_generated(
                 asset_id=asset_id,
                 user_id=context.share.user_id,
-                bucket=self._settings.cos_bucket,
+                bucket=build_object_storage(self._settings).bucket,
                 object_key=object_key,
                 content_type=rendered.content_type,
                 size_bytes=len(rendered.data),

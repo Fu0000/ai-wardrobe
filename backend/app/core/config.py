@@ -2,6 +2,7 @@ import base64
 import binascii
 from functools import lru_cache
 from ipaddress import ip_network
+from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
@@ -78,6 +79,9 @@ class Settings(BaseSettings):
     cos_upload_security_token: SecretStr = SecretStr("")
     cos_upload_ticket_ttl_seconds: int = Field(default=300, ge=60, le=900)
     cos_download_url_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
+    local_storage_enabled: bool = False
+    local_storage_root: str = "../.local/object-storage"
+    local_storage_base_url: str = "http://localhost:8000"
     max_upload_bytes: int = 20 * 1024 * 1024
     max_image_dimension: int = 12_000
     max_image_pixels: int = 40_000_000
@@ -232,6 +236,25 @@ class Settings(BaseSettings):
                 == self.cos_upload_secret_id.get_secret_value()
             ):
                 raise ValueError("COS runtime and upload identities must be different")
+        if self.cos_enabled and self.local_storage_enabled:
+            raise ValueError("COS and local object storage cannot be enabled together")
+        if self.local_storage_enabled:
+            if self.environment not in {"local", "test"}:
+                raise ValueError(
+                    "local object storage is restricted to local and test environments"
+                )
+            local_storage_url = urlsplit(self.local_storage_base_url)
+            if (
+                local_storage_url.scheme != "http"
+                or local_storage_url.hostname not in {"localhost", "127.0.0.1", "::1", "test"}
+                or local_storage_url.path not in {"", "/"}
+                or local_storage_url.query
+                or local_storage_url.fragment
+            ):
+                raise ValueError("local object storage URL must use a loopback HTTP origin")
+            storage_root = Path(self.local_storage_root).expanduser().resolve()
+            if storage_root == Path(storage_root.anchor) or storage_root == Path.home().resolve():
+                raise ValueError("local object storage root must be a dedicated directory")
         if self.environment not in {"staging", "production"}:
             return self
 

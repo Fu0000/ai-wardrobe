@@ -201,6 +201,55 @@ def test_local_cos_configuration_also_requires_separate_identities() -> None:
         )
 
 
+def test_local_object_storage_cannot_run_with_cos() -> None:
+    with pytest.raises(ValidationError, match="cannot be enabled together"):
+        Settings(
+            cos_enabled=True,
+            cos_bucket="private-bucket",
+            cos_secret_id="runtime-secret-id",
+            cos_secret_key="runtime-secret-key",
+            cos_upload_secret_id="upload-secret-id",
+            cos_upload_secret_key="upload-secret-key",
+            local_storage_enabled=True,
+        )
+
+
+def test_local_object_storage_is_restricted_to_non_deployed_environments() -> None:
+    with pytest.raises(ValidationError, match="restricted to local and test"):
+        production_settings(
+            cos_enabled=False,
+            local_storage_enabled=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://localhost:8000",
+        "http://192.168.1.2:8000",
+        "http://localhost:8000/prefix",
+        "http://localhost:8000?token=unsafe",
+    ],
+)
+def test_local_object_storage_requires_a_loopback_http_origin(base_url: str) -> None:
+    with pytest.raises(ValidationError, match="loopback HTTP origin"):
+        Settings(
+            environment="test",
+            local_storage_enabled=True,
+            local_storage_base_url=base_url,
+        )
+
+
+@pytest.mark.parametrize("root", ["/", str(Path.home())])
+def test_local_object_storage_rejects_broad_roots(root: str) -> None:
+    with pytest.raises(ValidationError, match="dedicated directory"):
+        Settings(
+            environment="test",
+            local_storage_enabled=True,
+            local_storage_root=root,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

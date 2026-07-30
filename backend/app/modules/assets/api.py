@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Never
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,13 @@ from app.core.errors import AppError
 from app.core.telemetry import current_trace_fields
 from app.modules.assets.repository import AssetRepository
 from app.modules.assets.service import AssetApplicationService, AssetServiceError
-from app.modules.assets.storage import ObjectStorage
+from app.modules.assets.storage import (
+    InvalidLocalStorageTokenError,
+    LocalObjectStorage,
+    ObjectNotFoundError,
+    ObjectStorage,
+    ObjectStorageUnavailableError,
+)
 from app.modules.events.server import (
     ServerEventContext,
     ServerEventRecorder,
@@ -74,6 +80,106 @@ def _service(
         repository=AssetRepository(session),
         object_storage=object_storage,
         settings=settings,
+    )
+
+
+def _local_storage(request: Request) -> LocalObjectStorage:
+    storage = request.app.state.object_storage
+    if not isinstance(storage, LocalObjectStorage):
+        raise AppError(
+            code="LOCAL_STORAGE_NOT_FOUND",
+            message="资源不存在。",
+            status_code=404,
+        )
+    return storage
+
+
+async def _read_local_upload(request: Request, *, max_bytes: int) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > max_bytes:
+                raise AppError(
+                    code="IMAGE_TOO_LARGE",
+                    message="图片大小不能超过 20MB。",
+                    status_code=413,
+                )
+        except ValueError:
+            pass
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > max_bytes:
+            raise AppError(
+                code="IMAGE_TOO_LARGE",
+                message="图片大小不能超过 20MB。",
+                status_code=413,
+            )
+    if not body:
+        raise AppError(
+            code="INVALID_IMAGE_CONTENT",
+            message="这不是有效的图片文件。",
+            status_code=422,
+        )
+    return bytes(body)
+
+
+@router.put(
+    "/local-storage/uploads/{token}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    include_in_schema=False,
+)
+async def local_storage_upload(token: str, request: Request) -> Response:
+    settings: Settings = request.app.state.settings
+    content_type = request.headers.get("content-type", "").split(";", maxsplit=1)[0].lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise AppError(
+            code="UNSUPPORTED_IMAGE_TYPE",
+            message="请选择 JPEG、PNG 或 WebP 图片。",
+            status_code=415,
+        )
+    data = await _read_local_upload(request, max_bytes=settings.max_upload_bytes)
+    try:
+        await _local_storage(request).write_signed_upload(
+            token=token,
+            data=data,
+            content_type=content_type,
+        )
+    except (InvalidLocalStorageTokenError, ObjectStorageUnavailableError) as error:
+        raise AppError(
+            code="LOCAL_STORAGE_UPLOAD_NOT_FOUND",
+            message="上传地址已失效，请重新选择图片。",
+            status_code=404,
+        ) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/local-storage/objects/{token}",
+    include_in_schema=False,
+)
+async def local_storage_download(token: str, request: Request) -> Response:
+    settings: Settings = request.app.state.settings
+    try:
+        data, content_type = await _local_storage(request).read_signed_download(
+            token=token,
+            max_bytes=settings.max_upload_bytes,
+        )
+    except (
+        InvalidLocalStorageTokenError,
+        ObjectNotFoundError,
+        ObjectStorageUnavailableError,
+    ) as error:
+        raise AppError(
+            code="LOCAL_STORAGE_OBJECT_NOT_FOUND",
+            message="资源不存在或访问地址已过期。",
+            status_code=404,
+        ) from error
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

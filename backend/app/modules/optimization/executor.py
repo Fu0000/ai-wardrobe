@@ -674,7 +674,7 @@ class OptimizationExecutor:
             await AssetRepository(session).create_generated(
                 asset_id=result_asset_id,
                 user_id=record.job.user_id,
-                bucket=self._settings.cos_bucket,
+                bucket=build_object_storage(self._settings).bucket,
                 object_key=object_key,
                 content_type="image/jpeg",
                 size_bytes=len(image_bytes),
