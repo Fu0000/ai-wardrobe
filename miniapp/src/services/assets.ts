@@ -98,13 +98,31 @@ export function chooseSourceImage(): Promise<SelectedImage> {
   });
 }
 
+function normalizeFileData(data: unknown): ArrayBuffer | null {
+  // 微信开发者工具可能从另一个 JS Realm 返回 ArrayBuffer，此时
+  // `instanceof ArrayBuffer` 会错误地返回 false；部分 uni-app 版本还会
+  // 包一层 Uint8Array。统一按二进制标签/视图归一化，避免误报读取失败。
+  if (Object.prototype.toString.call(data) === "[object ArrayBuffer]") {
+    return data as ArrayBuffer;
+  }
+  if (ArrayBuffer.isView(data)) {
+    const view = data as ArrayBufferView;
+    return view.buffer.slice(
+      view.byteOffset,
+      view.byteOffset + view.byteLength,
+    ) as ArrayBuffer;
+  }
+  return null;
+}
+
 function readFileAsArrayBuffer(filePath: string): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     uni.getFileSystemManager().readFile({
       filePath,
       success(result) {
-        if (result.data instanceof ArrayBuffer) {
-          resolve(result.data);
+        const fileData = normalizeFileData(result.data);
+        if (fileData) {
+          resolve(fileData);
           return;
         }
         reject(new ApiError("IMAGE_READ_FAILED", "无法读取所选图片。", 0));
