@@ -5,7 +5,7 @@ description = "AI Wardrobe modular monolith API and workers"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "alembic==1.18.5",
+    "alembic==1.19.0",
     "celery[redis]==5.6.3",
     "cos-python-sdk-v5==1.9.44",
     "cryptography==49.0.0",
